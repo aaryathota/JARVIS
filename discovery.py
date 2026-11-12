@@ -67,6 +67,11 @@ def save_channels(channels: list[Channel], path: str = CHANNELS_FILE) -> None:
         file.write("\n")
 
 
+def _identifier(value: str) -> str:
+    """Normalize IDs, handles, and names for shell-friendly management."""
+    return re.sub(r"[^a-z0-9]", "", str(value).lower().lstrip("@"))
+
+
 def seed_popular(limit: int = 8, path: str = CHANNELS_FILE,
                  popular_path: str = POPULAR_CHANNELS_FILE) -> int:
     """Add the first N starter creators, disabled until clipping is authorized."""
@@ -104,9 +109,9 @@ def add_channel(channel_id: str, name: str, niche: str, credit_text: str,
 
 def remove_channel(channel_id: str, path: str = CHANNELS_FILE) -> bool:
     channels = load_channels(path)
-    target = channel_id.lower()
+    target = _identifier(channel_id)
     kept = [channel for channel in channels if not any(
-        target == value.lower() for value in (channel.channel_id, channel.handle, channel.name)
+        target == _identifier(value) for value in (channel.channel_id, channel.handle, channel.name)
     )]
     if len(kept) == len(channels):
         return False
@@ -117,11 +122,11 @@ def remove_channel(channel_id: str, path: str = CHANNELS_FILE) -> bool:
 def set_channel_permission(channel_id: str, permitted: bool,
                            path: str = CHANNELS_FILE) -> bool:
     channels = load_channels(path)
-    target = channel_id.lower()
+    target = _identifier(channel_id)
     updated = []
     found = False
     for channel in channels:
-        if any(target == value.lower() for value in (channel.channel_id, channel.handle, channel.name)):
+        if any(target == _identifier(value) for value in (channel.channel_id, channel.handle, channel.name)):
             channel = Channel(channel.channel_id, channel.name, channel.niche,
                               permitted, channel.credit_text)
             found = True

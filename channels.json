@@ -35,7 +35,7 @@
     "channel_id": "",
     "name": "Kai Cenat",
     "niche": "entertainment",
-    "clipping_permitted": false,
+    "clipping_permitted": true,
     "credit_text": "Clip from Kai Cenat",
     "handle": "@KaiCenat"
   },
