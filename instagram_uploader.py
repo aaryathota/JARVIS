@@ -98,7 +98,7 @@ class InstagramUploader:
             self.is_authenticated = False
             error_msg = str(e)[:100]  # Truncate long error messages
             print(f"[INSTAGRAM ERROR] Authentication failed: {error_msg}")
-                if ("int() argument" in error_msg or "password encryption" in error_msg.lower()
+            if ("int() argument" in error_msg or "password encryption" in error_msg.lower()
                     or "out of date" in error_msg.lower()):
                 print("[INSTAGRAM] Login endpoint compatibility failure; Instagram changed its public login encryption API.")
                 print("[INSTAGRAM] Use the official Graph API for reliable Reel publishing, or retry after instagrapi releases a fix.")
