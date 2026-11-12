@@ -348,4 +348,17 @@ class InstagramUploader:
             return None
 
 
-# Note: Create instance on-demand in instagram_clips.py to avoid slow authentication during module import
+def upload_to_instagram_only(video_path, caption="", hashtags=""):
+    """Upload one local video to Instagram only; never calls the YouTube API."""
+    try:
+        uploader = InstagramUploader()
+        if not uploader.is_authenticated:
+            print("[INSTAGRAM ONLY] Not authenticated; upload skipped")
+            return False
+        return uploader.upload_video(video_path, caption=caption, hashtags=hashtags)
+    except Exception as error:
+        print(f"[INSTAGRAM ONLY] Upload failed: {error}")
+        return False
+
+
+# Create instances on demand to avoid slow authentication during imports.

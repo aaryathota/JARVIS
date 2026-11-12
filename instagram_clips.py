@@ -113,7 +113,7 @@ def create_instagram_clips_from_youtube(youtube_url, num_clips=2):
     3. Upload to Instagram
     """
     try:
-        from instagram_uploader import InstagramUploader
+        from instagram_uploader import upload_to_instagram_only
         import time
         
         # Try to import speak, but don't fail if missing
@@ -144,22 +144,10 @@ def create_instagram_clips_from_youtube(youtube_url, num_clips=2):
         
         print("[CLIPS] [OK] Video converted successfully!")
         
-        # Initialize Instagram uploader
-        print("[CLIPS] Initializing Instagram uploader...")
+        # Initialize Instagram-only upload path
+        print("[CLIPS] Initializing Instagram-only uploader...")
         speak("Connecting to Instagram...")
-        
-        try:
-            instagram_uploader = InstagramUploader()
-        except Exception as init_error:
-            print(f"[CLIPS] Failed to initialize Instagram uploader: {init_error}")
-            return []
-        
-        if not instagram_uploader.is_authenticated:
-            print("[CLIPS] ERROR: Instagram authentication failed!")
-            return []
-        
-        print("[CLIPS] [OK] Instagram authenticated!")
-        speak("Connected! Uploading clip...")
+        speak("Uploading to Instagram only...")
         
         print(f"[CLIPS] Uploading {num_clips} clip(s) to Instagram...")
         
@@ -171,7 +159,7 @@ def create_instagram_clips_from_youtube(youtube_url, num_clips=2):
             caption = "Check this out!"
             
             print(f"[CLIPS] Uploading: {instagram_file}")
-            result = instagram_uploader.upload_video(
+            result = upload_to_instagram_only(
                 instagram_file,
                 caption=caption
             )
