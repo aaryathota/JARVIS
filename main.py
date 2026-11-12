@@ -395,7 +395,7 @@ def get_smart_intent(command):
         if "run daily clips" in cmd_lower or "daily clips" == cmd_lower.strip():
             print("[INTENT] Detected DAILY CLIPS keyword")
             return {"intent": "daily_clips", "target": command, "confidence": 1.0}
-        if "add channel" in cmd_lower or "remove channel" in cmd_lower:
+        if any(phrase in cmd_lower for phrase in ("add channel", "remove channel", "enable channel", "disable channel")):
             print("[INTENT] Detected CHANNEL MANAGEMENT keyword")
             return {"intent": "channel_management", "target": command, "confidence": 1.0}
         
@@ -903,9 +903,13 @@ def execute(command):
     # -----------------------
     if intent == "channel_management":
         try:
-            from discovery import add_channel, remove_channel
+            from discovery import add_channel, remove_channel, set_channel_permission
             words = command.split()
             action = "remove" if "remove channel" in command else "add"
+            if "enable channel" in command:
+                action = "enable"
+            elif "disable channel" in command:
+                action = "disable"
             marker = words.index("channel")
             channel_id = words[marker + 1] if len(words) > marker + 1 else ""
             if not channel_id:
@@ -914,6 +918,10 @@ def execute(command):
             if action == "remove":
                 removed = remove_channel(channel_id)
                 speak("Channel removed." if removed else "That channel is not on the allowlist.")
+            elif action in {"enable", "disable"}:
+                permitted = action == "enable"
+                updated = set_channel_permission(channel_id, permitted)
+                speak(f"Channel {'enabled' if permitted else 'disabled'}." if updated else "That channel is not on the allowlist.")
             else:
                 name = " ".join(words[marker + 2:]) or channel_id
                 add_channel(channel_id, name, "entertainment", f"Clip from {name}")

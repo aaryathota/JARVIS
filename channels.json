@@ -1,1 +1,30 @@
-[]
+[
+	{
+		"channel_id": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+		"name": "MrBeast",
+		"niche": "entertainment",
+		"clipping_permitted": false,
+		"credit_text": "Clip from MrBeast"
+	},
+	{
+		"channel_id": "UC-lHJZR3Gqxm24_Vd_AJ5Yw",
+		"name": "PewDiePie",
+		"niche": "entertainment",
+		"clipping_permitted": false,
+		"credit_text": "Clip from PewDiePie"
+	},
+	{
+		"channel_id": "UC7_YxT-KID8kRbqZo7MyscQ",
+		"name": "Markiplier",
+		"niche": "gaming",
+		"clipping_permitted": false,
+		"credit_text": "Clip from Markiplier"
+	},
+	{
+		"channel_id": "UCYzPXprvl5Y-Sf0g4vX-m6g",
+		"name": "Jacksepticeye",
+		"niche": "gaming",
+		"clipping_permitted": false,
+		"credit_text": "Clip from Jacksepticeye"
+	}
+]

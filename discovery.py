@@ -82,6 +82,22 @@ def remove_channel(channel_id: str, path: str = CHANNELS_FILE) -> bool:
     return True
 
 
+def set_channel_permission(channel_id: str, permitted: bool,
+                           path: str = CHANNELS_FILE) -> bool:
+    channels = load_channels(path)
+    updated = []
+    found = False
+    for channel in channels:
+        if channel.channel_id == channel_id:
+            channel = Channel(channel.channel_id, channel.name, channel.niche,
+                              permitted, channel.credit_text)
+            found = True
+        updated.append(channel)
+    if found:
+        save_channels(updated, path)
+    return found
+
+
 def _parse_duration(value: str) -> float:
     match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?", value or "")
     if not match:
@@ -193,12 +209,20 @@ def main() -> None:
     add.add_argument("--credit", default="")
     remove = subparsers.add_parser("remove")
     remove.add_argument("channel_id")
+    enable = subparsers.add_parser("enable")
+    enable.add_argument("channel_id")
+    disable = subparsers.add_parser("disable")
+    disable.add_argument("channel_id")
     subparsers.add_parser("list")
     args = parser.parse_args()
     if args.action == "add":
         add_channel(args.channel_id, args.name, args.niche, args.credit)
     elif args.action == "remove":
         print("removed" if remove_channel(args.channel_id) else "not found")
+    elif args.action == "enable":
+        print("enabled" if set_channel_permission(args.channel_id, True) else "not found")
+    elif args.action == "disable":
+        print("disabled" if set_channel_permission(args.channel_id, False) else "not found")
     else:
         for channel in load_channels():
             print(f"{channel.channel_id}\t{channel.name}\t{channel.niche}\t{channel.clipping_permitted}")
