@@ -14,6 +14,7 @@ from db import init_db, save_source, source_seen
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHANNELS_FILE = os.path.join(HERE, "channels.json")
+POPULAR_CHANNELS_FILE = os.path.join(HERE, "popular_channels.json")
 MIN_DURATION = 5 * 60
 MAX_DURATION = 90 * 60
 MAX_AGE = timedelta(hours=48)
@@ -26,6 +27,7 @@ class Channel:
     niche: str
     clipping_permitted: bool
     credit_text: str
+    handle: str = ""
 
 
 @dataclass(frozen=True)
@@ -50,11 +52,12 @@ def load_channels(path: str = CHANNELS_FILE) -> list[Channel]:
     if not isinstance(raw, list):
         raise ValueError("channels.json must contain a list")
     return [Channel(
-        channel_id=str(item["channel_id"]),
+        channel_id=str(item.get("channel_id", "")),
         name=str(item.get("name", item["channel_id"])),
         niche=str(item.get("niche", "entertainment")),
         clipping_permitted=bool(item.get("clipping_permitted", False)),
         credit_text=str(item.get("credit_text", "")),
+        handle=str(item.get("handle", "")),
     ) for item in raw]
 
 
@@ -62,6 +65,32 @@ def save_channels(channels: list[Channel], path: str = CHANNELS_FILE) -> None:
     with open(path, "w", encoding="utf-8") as file:
         json.dump([channel.__dict__ for channel in channels], file, indent=2)
         file.write("\n")
+
+
+def seed_popular(limit: int = 8, path: str = CHANNELS_FILE,
+                 popular_path: str = POPULAR_CHANNELS_FILE) -> int:
+    """Add the first N starter creators, disabled until clipping is authorized."""
+    with open(popular_path, "r", encoding="utf-8") as file:
+        popular = json.load(file)[:max(0, limit)]
+    channels = load_channels(path)
+    existing = {channel.channel_id or channel.handle for channel in channels}
+    added = 0
+    for item in popular:
+        key = str(item.get("channel_id") or item.get("handle", ""))
+        if not key or key in existing:
+            continue
+        channels.append(Channel(
+            channel_id=str(item.get("channel_id", "")),
+            name=str(item["name"]),
+            niche=str(item.get("niche", "entertainment")),
+            clipping_permitted=False,
+            credit_text=str(item.get("credit_text", "")),
+            handle=str(item.get("handle", "")),
+        ))
+        existing.add(key)
+        added += 1
+    save_channels(channels, path)
+    return added
 
 
 def add_channel(channel_id: str, name: str, niche: str, credit_text: str,
@@ -75,7 +104,10 @@ def add_channel(channel_id: str, name: str, niche: str, credit_text: str,
 
 def remove_channel(channel_id: str, path: str = CHANNELS_FILE) -> bool:
     channels = load_channels(path)
-    kept = [channel for channel in channels if channel.channel_id != channel_id]
+    target = channel_id.lower()
+    kept = [channel for channel in channels if not any(
+        target == value.lower() for value in (channel.channel_id, channel.handle, channel.name)
+    )]
     if len(kept) == len(channels):
         return False
     save_channels(kept, path)
@@ -85,10 +117,11 @@ def remove_channel(channel_id: str, path: str = CHANNELS_FILE) -> bool:
 def set_channel_permission(channel_id: str, permitted: bool,
                            path: str = CHANNELS_FILE) -> bool:
     channels = load_channels(path)
+    target = channel_id.lower()
     updated = []
     found = False
     for channel in channels:
-        if channel.channel_id == channel_id:
+        if any(target == value.lower() for value in (channel.channel_id, channel.handle, channel.name)):
             channel = Channel(channel.channel_id, channel.name, channel.niche,
                               permitted, channel.credit_text)
             found = True
@@ -139,8 +172,16 @@ def discover_candidates(limit: int = 10, db_path: str | None = None,
     candidates: list[Candidate] = []
 
     for channel in permitted_channels:
+        channel_id = channel.channel_id
+        if not channel_id and channel.handle:
+            resolved = youtube.channels().list(
+                part="id", forHandle=channel.handle
+            ).execute().get("items", [])
+            if not resolved:
+                continue
+            channel_id = resolved[0]["id"]
         channel_response = youtube.channels().list(
-            part="contentDetails", id=channel.channel_id
+            part="contentDetails", id=channel_id
         ).execute()
         items = channel_response.get("items", [])
         if not items:
@@ -171,7 +212,7 @@ def discover_candidates(limit: int = 10, db_path: str | None = None,
             likes = int(stats.get("likeCount", 0))
             candidate = Candidate(
                 video_id=video_id,
-                channel_id=channel.channel_id,
+                channel_id=channel_id,
                 channel_name=channel.name,
                 title=snippet.get("title", "Untitled"),
                 url=f"https://www.youtube.com/watch?v={video_id}",
@@ -213,6 +254,8 @@ def main() -> None:
     enable.add_argument("channel_id")
     disable = subparsers.add_parser("disable")
     disable.add_argument("channel_id")
+    seed = subparsers.add_parser("seed-popular")
+    seed.add_argument("--limit", type=int, default=8)
     subparsers.add_parser("list")
     args = parser.parse_args()
     if args.action == "add":
@@ -223,6 +266,8 @@ def main() -> None:
         print("enabled" if set_channel_permission(args.channel_id, True) else "not found")
     elif args.action == "disable":
         print("disabled" if set_channel_permission(args.channel_id, False) else "not found")
+    elif args.action == "seed-popular":
+        print(f"added {seed_popular(args.limit)} starter channels")
     else:
         for channel in load_channels():
             print(f"{channel.channel_id}\t{channel.name}\t{channel.niche}\t{channel.clipping_permitted}")

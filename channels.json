@@ -1,30 +1,98 @@
 [
-	{
-		"channel_id": "UCX6OQ3DkcsbYNE6H8uQQuVA",
-		"name": "MrBeast",
-		"niche": "entertainment",
-		"clipping_permitted": false,
-		"credit_text": "Clip from MrBeast"
-	},
-	{
-		"channel_id": "UC-lHJZR3Gqxm24_Vd_AJ5Yw",
-		"name": "PewDiePie",
-		"niche": "entertainment",
-		"clipping_permitted": false,
-		"credit_text": "Clip from PewDiePie"
-	},
-	{
-		"channel_id": "UC7_YxT-KID8kRbqZo7MyscQ",
-		"name": "Markiplier",
-		"niche": "gaming",
-		"clipping_permitted": false,
-		"credit_text": "Clip from Markiplier"
-	},
-	{
-		"channel_id": "UCYzPXprvl5Y-Sf0g4vX-m6g",
-		"name": "Jacksepticeye",
-		"niche": "gaming",
-		"clipping_permitted": false,
-		"credit_text": "Clip from Jacksepticeye"
-	}
+  {
+    "channel_id": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+    "name": "MrBeast",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from MrBeast",
+    "handle": ""
+  },
+  {
+    "channel_id": "UC-lHJZR3Gqxm24_Vd_AJ5Yw",
+    "name": "PewDiePie",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from PewDiePie",
+    "handle": ""
+  },
+  {
+    "channel_id": "UC7_YxT-KID8kRbqZo7MyscQ",
+    "name": "Markiplier",
+    "niche": "gaming",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Markiplier",
+    "handle": ""
+  },
+  {
+    "channel_id": "UCYzPXprvl5Y-Sf0g4vX-m6g",
+    "name": "Jacksepticeye",
+    "niche": "gaming",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Jacksepticeye",
+    "handle": ""
+  },
+  {
+    "channel_id": "",
+    "name": "Kai Cenat",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Kai Cenat",
+    "handle": "@KaiCenat"
+  },
+  {
+    "channel_id": "",
+    "name": "Fanum",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Fanum",
+    "handle": "@Fanum"
+  },
+  {
+    "channel_id": "",
+    "name": "Neon",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Neon",
+    "handle": "@NeonMan"
+  },
+  {
+    "channel_id": "",
+    "name": "IShowSpeed",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from IShowSpeed",
+    "handle": "@IShowSpeed"
+  },
+  {
+    "channel_id": "UCDogdKl7t7NHzQ95aEwkdMw",
+    "name": "Sidemen",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from Sidemen",
+    "handle": ""
+  },
+  {
+    "channel_id": "",
+    "name": "KSI",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from KSI",
+    "handle": "@KSI"
+  },
+  {
+    "channel_id": "UClK4S3kGZN8YTiWA1MRaH0g",
+    "name": "JasonTheWeen Live",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from JasonTheWeen",
+    "handle": ""
+  },
+  {
+    "channel_id": "UC1z3h9m39bR8dDQqeeqzaaw",
+    "name": "JasonTheWeen News",
+    "niche": "entertainment",
+    "clipping_permitted": false,
+    "credit_text": "Clip from JasonTheWeen",
+    "handle": ""
+  }
 ]
