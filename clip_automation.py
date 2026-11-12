@@ -200,6 +200,7 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
 
         # Step 2: sign in to YouTube
         uploader = None
+        instagram_uploader = None
         if upload:
             try:
                 uploader = YouTubeUploader()
@@ -209,6 +210,15 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
             except Exception as e:
                 print(f"[CLIP AUTOMATION] Warning: Could not initialize YouTube uploader: {e}")
                 uploader = None
+            if os.getenv("INSTAGRAM_AUTO_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+                try:
+                    from instagram_uploader import InstagramUploader
+                    instagram_uploader = InstagramUploader()
+                    if not instagram_uploader.is_authenticated:
+                        print("[INSTAGRAM] Auto-upload disabled for this run: authentication unavailable")
+                        instagram_uploader = None
+                except Exception as e:
+                    print(f"[INSTAGRAM] Auto-upload unavailable: {e}")
 
         # Step 3: choose the moments to clip
         random_start_times = []
@@ -319,6 +329,13 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                     job_status.clip(status_number, status="done", id=video_id_uploaded,
                                     url=f"https://www.youtube.com/shorts/{video_id_uploaded}")
                     speak(f"Clip {i+1} uploaded successfully!")
+                    if instagram_uploader:
+                        instagram_ok = instagram_uploader.upload_video(
+                            clip_path,
+                            caption=description[:2200],
+                        )
+                        print("[INSTAGRAM] Mirrored YouTube clip successfully" if instagram_ok
+                              else "[INSTAGRAM] Mirror upload failed; YouTube upload remains successful")
                     if DELETE_CLIPS_AFTER_UPLOAD:
                         delete_clip_after_upload(clip_path)
                 else:

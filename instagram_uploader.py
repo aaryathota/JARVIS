@@ -7,12 +7,14 @@ import json
 import time
 import threading
 import logging
+from dotenv import load_dotenv
 from datetime import datetime
 from pathlib import Path
 
 # Suppress instagrapi logging and set UTF-8 encoding
 logging.getLogger('instagrapi').setLevel(logging.CRITICAL)
 os.environ['PYTHONIOENCODING'] = 'utf-8'
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 try:
     from instagrapi import Client
@@ -37,19 +39,19 @@ class InstagramUploader:
         self.authenticate()
     
     def load_credentials(self):
-        """Load Instagram credentials from file"""
+        """Load Instagram credentials, preferring the project-local .env."""
         try:
-            # Try to load from credentials.json
-            if os.path.exists('credentials.json'):
-                with open('credentials.json', 'r', encoding='utf-8') as f:
-                    creds = json.load(f)
-                    self.username = creds.get('instagram_username')
-                    self.password = creds.get('instagram_password')
-            
-            # Try to load from environment or config
+            self.username = os.getenv('INSTAGRAM_USERNAME', '').strip()
+            self.password = os.getenv('INSTAGRAM_PASSWORD', '').strip()
+
+            # Legacy local fallback for existing installations.
             if not self.username:
-                self.username = os.getenv('INSTAGRAM_USERNAME')
-                self.password = os.getenv('INSTAGRAM_PASSWORD')
+                credentials_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'credentials.json')
+                if os.path.exists(credentials_path):
+                    with open(credentials_path, 'r', encoding='utf-8') as f:
+                        creds = json.load(f)
+                    self.username = str(creds.get('instagram_username', '')).strip()
+                    self.password = str(creds.get('instagram_password', '')).strip()
             
             if self.username and self.password:
                 print(f"[INSTAGRAM] Credentials loaded for: {self.username}")
