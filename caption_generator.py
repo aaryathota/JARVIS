@@ -12,7 +12,7 @@ import os
 import re
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 MAX_TITLE = 60
@@ -68,7 +68,7 @@ def _groq_key():
     if key:
         return key
     try:
-        with open("credentials.json", "r", encoding="utf-8-sig") as f:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json"), "r", encoding="utf-8-sig") as f:
             return json.load(f).get("groq_api_key", "")
     except Exception:
         return ""

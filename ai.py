@@ -9,7 +9,7 @@ from groq import Groq
 from dotenv import load_dotenv
 from conversation_memory import get_memory, add_to_memory, get_context_for_query
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 def ask_ai_text(prompt, max_tokens=500, use_context=True):
     """Query Groq API for text responses with optional context"""
@@ -18,7 +18,7 @@ def ask_ai_text(prompt, max_tokens=500, use_context=True):
         groq_key = os.getenv("GROQ_API_KEY", "").strip()
         if not groq_key:
             try:
-                with open(os.path.join(os.path.dirname(__file__), 'credentials.json'), 'r', encoding='utf-8-sig') as f:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'credentials.json'), 'r', encoding='utf-8-sig') as f:
                     groq_key = json.load(f).get('groq_api_key', '').strip()
             except FileNotFoundError:
                 pass

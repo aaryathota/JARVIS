@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 
