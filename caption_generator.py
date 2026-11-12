@@ -10,6 +10,9 @@ import glob
 import json
 import os
 import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 MAX_TITLE = 60

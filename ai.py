@@ -4,19 +4,27 @@ Handles basic AI operations and decision making with context awareness
 """
 
 import json
+import os
 from groq import Groq
+from dotenv import load_dotenv
 from conversation_memory import get_memory, add_to_memory, get_context_for_query
+
+load_dotenv()
 
 def ask_ai_text(prompt, max_tokens=500, use_context=True):
     """Query Groq API for text responses with optional context"""
     try:
-        # Load credentials
-        with open('credentials.json', 'r') as f:
-            creds = json.load(f)
-            groq_key = creds.get('groq_api_key', '')
+        # Prefer the ignored .env file; keep credentials.json as a legacy fallback.
+        groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        if not groq_key:
+            try:
+                with open(os.path.join(os.path.dirname(__file__), 'credentials.json'), 'r', encoding='utf-8-sig') as f:
+                    groq_key = json.load(f).get('groq_api_key', '').strip()
+            except FileNotFoundError:
+                pass
         
         if not groq_key or groq_key.strip() == '':
-            print("[GROQ] ERROR: No API key found in credentials.json")
+            print("[GROQ] ERROR: No GROQ_API_KEY found in .env or credentials.json")
             return None
         
         # Add conversation context if enabled
@@ -29,12 +37,13 @@ def ask_ai_text(prompt, max_tokens=500, use_context=True):
         # Call Groq API
         client = Groq(api_key=groq_key)
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
+            extra_body={"reasoning_effort": "low"},
             messages=[{"role": "user", "content": enhanced_prompt}],
             max_tokens=max_tokens
         )
         
-        result = response.choices[0].message.content
+        result = response.choices[0].message.content or ""
         print(f"[GROQ] Success: {len(result)} chars")
         
         # Store in conversation memory
@@ -42,10 +51,8 @@ def ask_ai_text(prompt, max_tokens=500, use_context=True):
         
         return result
         
-    except FileNotFoundError:
-        print("[GROQ] ERROR: credentials.json not found")
     except json.JSONDecodeError:
-        print("[GROQ] ERROR: credentials.json is not valid JSON")
+        print("[GROQ] ERROR: legacy credentials.json is not valid JSON")
     except KeyError as e:
         print(f"[GROQ] ERROR: {e} not found in credentials")
     except Exception as e:
