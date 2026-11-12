@@ -9,7 +9,9 @@ import threading
 import os
 
 # Create Flask app with correct template folder
-app = Flask(__name__, template_folder='ui', static_folder='ui')
+import os
+UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui')
+app = Flask(__name__, template_folder=UI_DIR, static_folder=UI_DIR)
 CORS(app)
 
 # Import modules
@@ -17,6 +19,8 @@ from system_stats import system_stats
 from alerts_manager import alerts_manager
 from event_tracker import event_tracker
 from workflow_manager import workflow_manager
+from discovery import load_channels
+from analytics import performance_summary
 
 class DashboardServer:
     def __init__(self, port=5000):
@@ -131,9 +135,98 @@ def health():
         'timestamp': __import__('datetime').datetime.now().isoformat()
     })
 
+
+@app.route('/api/channels', methods=['GET'])
+def get_channels():
+    """Return the permitted clipping allowlist."""
+    try:
+        return jsonify({'success': True, 'channels': [channel.__dict__ for channel in load_channels()]})
+    except Exception as error:
+        return jsonify({'success': False, 'error': str(error)}), 500
+
+
+@app.route('/api/performance', methods=['GET'])
+def get_performance():
+    """Return locally stored clip performance summaries."""
+    try:
+        return jsonify({'success': True, 'performance': performance_summary()})
+    except Exception as error:
+        return jsonify({'success': False, 'error': str(error)}), 500
+
+# ---------------- Shorts Studio (control the Shorts creator from the UI) ----------------
+import job_status
+
+
+def _shorts_worker(url, clips, privacy):
+    from clip_automation import create_and_upload_clips_from_video
+    create_and_upload_clips_from_video(url, num_clips=clips, privacy_status=privacy)
+
+
+def _daily_worker(limit, dry_run):
+    from daily import run_daily_clips
+    run_daily_clips(limit=limit, dry_run=dry_run)
+
+
+@app.route('/api/shorts', methods=['POST'])
+def start_shorts():
+    """Start creating Shorts from a YouTube URL"""
+    data = request.json or {}
+    url = str(data.get('url', '')).strip()
+    try:
+        clips = max(1, min(int(data.get('clips', 2)), 10))
+    except (TypeError, ValueError):
+        clips = 2
+    privacy = data.get('privacy', 'public')
+    if privacy not in ('public', 'unlisted', 'private'):
+        privacy = 'public'
+    if not url.startswith(('http://', 'https://')):
+        return jsonify({'success': False, 'error': 'Paste a valid video link'}), 400
+    if job_status.is_running():
+        return jsonify({'success': False, 'error': 'A Shorts job is already running'}), 409
+    job_status.start(clips, url)
+    threading.Thread(target=_shorts_worker, args=(url, clips, privacy), daemon=True).start()
+    return jsonify({'success': True})
+
+
+@app.route('/api/shorts/status', methods=['GET'])
+def shorts_status():
+    """Live step, per-clip progress and log of the Shorts job (also shows voice-started jobs)"""
+    snap = job_status.snapshot()
+    snap['success'] = True
+    return jsonify(snap)
+
+
+@app.route('/api/daily-clips', methods=['POST'])
+def start_daily_clips():
+    """Start the unattended daily Shorts batch from the dashboard."""
+    data = request.json or {}
+    try:
+        limit = max(1, min(int(data.get('limit', 10)), 10))
+    except (TypeError, ValueError):
+        limit = 10
+    dry_run = bool(data.get('dry_run', False))
+    if job_status.is_running():
+        return jsonify({'success': False, 'error': 'A Shorts job is already running'}), 409
+    job_status.start(limit, 'daily discovery')
+    threading.Thread(target=_daily_worker, args=(limit, dry_run), daemon=True).start()
+    return jsonify({'success': True, 'dry_run': dry_run, 'limit': limit})
+
+
 @app.route('/')
 def dashboard():
     """Main dashboard page"""
+    if not os.path.isfile(os.path.join(UI_DIR, 'dashboard.html')):
+        try:
+            found = sorted(os.listdir(UI_DIR)) if os.path.isdir(UI_DIR) else None
+        except Exception:
+            found = None
+        listing = ("The folder exists but contains: " + ", ".join(found or ["(empty)"])) if found is not None else "That folder does not exist yet."
+        return (
+            "<body style='background:#04060d;color:#d6f3ff;font:16px Segoe UI,sans-serif;padding:40px'>"
+            "<h2 style='color:#22e4ff'>Dashboard file not found</h2>"
+            f"<p>Put <b>dashboard.html</b> exactly here:</p><pre style='color:#3dffa2'>{os.path.join(UI_DIR, 'dashboard.html')}</pre>"
+            f"<p>{listing}</p><p>Then refresh this page.</p></body>"
+        ), 404
     return render_template('dashboard.html')
 
 # Global dashboard instance

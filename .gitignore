@@ -2,6 +2,18 @@
 #Template for AL projects for Dynamics 365 Business Central
 #launch.json folder
 .vscode/
+.env
+credentials.json
+youtube_credentials.json
+youtube_token.pickle
+token.json
+*.db
+logs/
+.spotifycache
+__pycache__/
+conversation_history.json
+jarvis_dictation_*.txt
+*.mp4.part
 #Cache folder
 .alcache/
 #Symbols folder

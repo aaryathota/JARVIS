@@ -1,31 +1,24 @@
 import time
-from actions import check_emails, create_reminder
+from actions import create_reminder
 from utils import speak
 
 memory = {"emails": []}
 
 def email_monitor():
-    while True:
-        emails = check_emails()
-
-        new = [e for e in emails if e not in memory["emails"]]
-
-        for e in new:
-            speak(f"New email: {e}")
-
-            if "meeting" in e.lower():
-                create_reminder(f"Follow up {e}")
-
-        memory["emails"] = emails
-        time.sleep(120)
+    """Legacy hook retained without automatic inbox access."""
+    print("[EMAIL] Automatic email monitoring is disabled; ask to read emails.")
 
 def daily_routine():
-    while True:
+    from control import is_cancelled
+
+    while not is_cancelled():
         speak("Running background tasks")
         time.sleep(3600)
 
 def smart_tasks():
-    while True:
+    from control import is_cancelled
+
+    while not is_cancelled():
         hour = time.localtime().tm_hour
 
         if hour == 9:
@@ -41,6 +34,5 @@ def smart_tasks():
 from actions import check_emails_smart
 
 def email_monitor_smart():
-    while True:
-        check_emails_smart(speak)
-        time.sleep(120)
+    """Legacy hook retained without automatic inbox access."""
+    print("[EMAIL] Automatic email monitoring is disabled; ask to read emails.")

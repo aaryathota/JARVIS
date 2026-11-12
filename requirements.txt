@@ -18,9 +18,14 @@ groq==0.4.2
 
 # Media & Video
 moviepy==1.0.3
-yt-dlp==2023.11.16
+yt-dlp==2026.10.26
 Pillow==10.0.0
 pydub==0.25.1
+# Optional local transcription and media analysis (large native dependencies)
+faster-whisper==1.2.1
+librosa==0.11.0
+opencv-python==4.13.0.92
+mediapipe==0.10.33
 
 # Social Media & Automation
 instagrapi==2.0.0

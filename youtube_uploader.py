@@ -1,7 +1,7 @@
 """
 YouTube Uploader - Handle video uploads to YouTube with authentication
 """
-import pickle
+from job_status import say
 import os
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -11,13 +11,22 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 import json
+import time
+from db import consume_quota
 from datetime import datetime, timedelta
+
+CORE_HASHTAGS = ["shorts", "youtubeshorts", "viral", "trending"]
+UPLOAD_QUOTA_UNITS = 1600
+
+# Files live next to this script, no matter which folder JARVIS is started from
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_TOKEN_FILE = os.path.join(_HERE, "token.json")
 
 # YouTube API scopes
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 class YouTubeUploader:
-    def __init__(self, client_secrets_file="youtube_credentials.json"):
+    def __init__(self, client_secrets_file=os.path.join(_HERE, "youtube_credentials.json")):
         """Initialize YouTube uploader with OAuth credentials"""
         self.client_secrets_file = client_secrets_file
         self.credentials = None
@@ -28,17 +37,23 @@ class YouTubeUploader:
         """Authenticate and setup YouTube API client"""
         try:
             # Load existing credentials if available
-            if os.path.exists("youtube_token.pickle"):
-                with open("youtube_token.pickle", "rb") as token:
-                    self.credentials = pickle.load(token)
-                print("[YOUTUBE] Loaded existing credentials")
+            if os.path.exists(_TOKEN_FILE):
+                self.credentials = Credentials.from_authorized_user_file(_TOKEN_FILE, SCOPES)
+                say("[YOUTUBE] Loaded existing credentials")
             else:
-                print("[YOUTUBE] No existing token, creating new flow...")
+                say("[YOUTUBE] No existing token, creating new flow...")
             
             # Refresh if needed
             if self.credentials and self.credentials.expired and self.credentials.refresh_token:
-                self.credentials.refresh(Request())
-                print("[YOUTUBE] Credentials refreshed")
+                try:
+                    self.credentials.refresh(Request())
+                    say("[YOUTUBE] Credentials refreshed")
+                except Exception as refresh_error:
+                    # Token revoked/expired (e.g. 7-day limit in Testing mode): sign in again automatically
+                    say(f"[YOUTUBE] Saved login no longer valid ({refresh_error}). Signing in again...")
+                    self.credentials = None
+                    if os.path.exists(_TOKEN_FILE):
+                        os.remove(_TOKEN_FILE)
             
             # If no credentials, do OAuth flow
             if not self.credentials or not self.credentials.valid:
@@ -49,27 +64,27 @@ class YouTubeUploader:
             
             # Save credentials for next time
             if self.credentials:
-                with open("youtube_token.pickle", "wb") as token:
-                    pickle.dump(self.credentials, token)
+                with open(_TOKEN_FILE, "w", encoding="utf-8") as token:
+                    token.write(self.credentials.to_json())
             
             # Build YouTube API client
             if self.credentials:
                 self.youtube = build("youtube", "v3", credentials=self.credentials)
-                print("[YOUTUBE] ✓ YouTube client ready")
+                say("[YOUTUBE] ✓ YouTube client ready")
                 return True
             
             return False
         
         except Exception as e:
-            print(f"[YOUTUBE SETUP ERROR] {str(e)}")
+            say(f"[YOUTUBE SETUP ERROR] {str(e)}")
             return False
     
     def authenticate_user(self):
         """Authenticate user and get credentials"""
         try:
             if not os.path.exists(self.client_secrets_file):
-                print(f"[YOUTUBE AUTH] Error: {self.client_secrets_file} not found")
-                print("[YOUTUBE AUTH] Please save your client_id and client_secret to this file")
+                say(f"[YOUTUBE AUTH] Error: {self.client_secrets_file} not found")
+                say("[YOUTUBE AUTH] Please save your client_id and client_secret to this file")
                 return False
             
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -77,15 +92,16 @@ class YouTubeUploader:
             
             # Run local server for authentication
             self.credentials = flow.run_local_server(port=9999, open_browser=True)
-            print("[YOUTUBE] ✓ User authenticated successfully")
+            say("[YOUTUBE] ✓ User authenticated successfully")
             return True
         
         except Exception as e:
-            print(f"[YOUTUBE AUTH ERROR] {str(e)}")
+            say(f"[YOUTUBE AUTH ERROR] {str(e)}")
             return False
     
-    def upload_video(self, video_file, title, description, tags=None, category="25", 
-                    privacy_status="public", playlist_id=None):
+    def upload_video(self, video_file, title, description, tags=None, category="24",
+                    privacy_status="public", playlist_id=None, publish_at=None,
+                    pinned_comment=None):
         """
         Upload video to YouTube
         
@@ -102,32 +118,47 @@ class YouTubeUploader:
             Video ID or None
         """
         if not self.youtube:
-            print("[YOUTUBE] Error: YouTube client not initialized")
+            say("[YOUTUBE] Error: YouTube client not initialized")
             return None
         
         if not os.path.exists(video_file):
-            print(f"[YOUTUBE] Error: File not found: {video_file}")
+            say(f"[YOUTUBE] Error: File not found: {video_file}")
             return None
         
         try:
-            print(f"[YOUTUBE] Uploading: {title}")
+            say(f"[YOUTUBE] Uploading: {title}")
+            quota_limit = int(os.getenv("YOUTUBE_DAILY_QUOTA_LIMIT", "10000"))
+            if not consume_quota(UPLOAD_QUOTA_UNITS, quota_limit):
+                say("[YOUTUBE] Daily API quota would be exceeded; upload deferred")
+                return None
+
+            upload_tags = []
+            for tag in CORE_HASHTAGS + (tags or []):
+                clean_tag = str(tag).lower().lstrip("#").strip()
+                if clean_tag and clean_tag not in upload_tags:
+                    upload_tags.append(clean_tag)
+            hashtag_line = " ".join(f"#{tag}" for tag in upload_tags[:15])
+            if hashtag_line and hashtag_line not in description:
+                description = f"{description.rstrip()}\n\n{hashtag_line}"
             
             # Video metadata
             body = {
                 "snippet": {
                     "title": title[:100],
                     "description": description[:5000],
-                    "tags": (tags or [])[:500],
+                    "tags": upload_tags[:500],
                     "categoryId": category,
                     "defaultLanguage": "en",
                     "defaultAudioLanguage": "en"
                 },
                 "status": {
-                    "privacyStatus": privacy_status,
+                    "privacyStatus": "private" if publish_at else privacy_status,
                     "notifySubscribers": False,
                     "madeForKids": False
                 }
             }
+            if publish_at:
+                body["status"]["publishAt"] = publish_at
             
             # Schedule upload for later if needed
             # body["status"]["publishAt"] = (datetime.now() + timedelta(hours=1)).isoformat() + "Z"
@@ -150,35 +181,72 @@ class YouTubeUploader:
             
             # Upload with progress tracking
             response = None
+            retries = 0
             while response is None:
                 try:
                     status, response = request.next_chunk()
+                    retries = 0
                     if status:
                         progress = int(status.progress() * 100)
-                        print(f"[YOUTUBE] Upload progress: {progress}%")
+                        say(f"[YOUTUBE] Upload progress: {progress}%")
                 except HttpError as e:
-                    print(f"[YOUTUBE] Upload error: {e}")
+                    status_code = getattr(e.resp, "status", 0)
+                    if status_code in (429, 500, 502, 503, 504) and retries < 5:
+                        delay = min(60, 2 ** retries)
+                        retries += 1
+                        say(f"[YOUTUBE] Temporary upload error ({status_code}); retrying in {delay}s")
+                        time.sleep(delay)
+                        continue
+                    say(f"[YOUTUBE] Upload error ({status_code or 'unknown'}): {e}")
                     return None
             
             video_id = response.get("id")
-            print(f"[YOUTUBE] ✓ Video uploaded successfully!")
-            print(f"[YOUTUBE] Video ID: {video_id}")
-            print(f"[YOUTUBE] URL: https://www.youtube.com/watch?v={video_id}")
+            say(f"[YOUTUBE] ✓ Video uploaded successfully!")
+            say(f"[YOUTUBE] Video ID: {video_id}")
+            say(f"[YOUTUBE] URL: https://www.youtube.com/watch?v={video_id}")
             
             # Add to playlist if specified
             if playlist_id and video_id:
                 self.add_to_playlist(playlist_id, video_id)
+            if pinned_comment and video_id:
+                self.post_pinned_comment(video_id, pinned_comment)
             
             return video_id
         
         except HttpError as e:
-            print(f"[YOUTUBE UPLOAD ERROR] {e}")
-            print(f"Error details: {e.content.decode('utf-8')}")
+            if getattr(e.resp, "status", 0) == 403:
+                say("[YOUTUBE] Public upload rejected with 403; check API project verification and channel permissions")
+            say(f"[YOUTUBE UPLOAD ERROR] {e}")
+            say(f"Error details: {e.content.decode('utf-8')}")
             return None
-        
+
         except Exception as e:
-            print(f"[YOUTUBE ERROR] {str(e)}")
+            say(f"[YOUTUBE ERROR] {str(e)}")
             return None
+
+    def post_pinned_comment(self, video_id, text):
+        """Post a discussion prompt; pinning requires an additional API action."""
+        try:
+            request = self.youtube.commentThreads().insert(
+                part="snippet",
+                body={"snippet": {"videoId": video_id, "topLevelComment": {
+                    "snippet": {"textOriginal": text[:10000]}
+                }}}
+            )
+            response = request.execute()
+            comment_id = response.get("snippet", {}).get("topLevelComment", {}).get("id")
+            if comment_id:
+                try:
+                    self.youtube.comments().setModerationStatus(
+                        id=comment_id, moderationStatus="published"
+                    ).execute()
+                except Exception:
+                    pass
+            say(f"[YOUTUBE] Comment posted for {video_id}")
+            return True
+        except Exception as error:
+            say(f"[YOUTUBE COMMENT] Could not post comment: {error}")
+            return False
     
     def add_to_playlist(self, playlist_id, video_id):
         """Add video to a YouTube playlist"""
@@ -196,11 +264,11 @@ class YouTubeUploader:
                 }
             )
             request.execute()
-            print(f"[YOUTUBE] ✓ Video added to playlist: {playlist_id}")
+            say(f"[YOUTUBE] ✓ Video added to playlist: {playlist_id}")
             return True
         
         except Exception as e:
-            print(f"[YOUTUBE PLAYLIST ERROR] {str(e)}")
+            say(f"[YOUTUBE PLAYLIST ERROR] {str(e)}")
             return False
     
     def create_playlist(self, title, description=""):
@@ -222,11 +290,11 @@ class YouTubeUploader:
             )
             response = request.execute()
             playlist_id = response.get("id")
-            print(f"[YOUTUBE] ✓ Playlist created: {title}")
+            say(f"[YOUTUBE] ✓ Playlist created: {title}")
             return playlist_id
         
         except Exception as e:
-            print(f"[YOUTUBE PLAYLIST CREATE ERROR] {str(e)}")
+            say(f"[YOUTUBE PLAYLIST CREATE ERROR] {str(e)}")
             return None
     
     def get_channel_info(self):
@@ -247,13 +315,13 @@ class YouTubeUploader:
                     "video_count": channel["statistics"].get("videoCount", "0"),
                     "view_count": channel["statistics"].get("viewCount", "0")
                 }
-                print(f"[YOUTUBE] Channel: {info['title']}")
+                say(f"[YOUTUBE] Channel: {info['title']}")
                 return info
             
             return None
         
         except Exception as e:
-            print(f"[YOUTUBE CHANNEL ERROR] {str(e)}")
+            say(f"[YOUTUBE CHANNEL ERROR] {str(e)}")
             return None
     
     def update_video_metadata(self, video_id, title=None, description=None, tags=None):
@@ -281,13 +349,13 @@ class YouTubeUploader:
                     body=video
                 )
                 update_request.execute()
-                print(f"[YOUTUBE] ✓ Video metadata updated: {video_id}")
+                say(f"[YOUTUBE] ✓ Video metadata updated: {video_id}")
                 return True
             
             return False
         
         except Exception as e:
-            print(f"[YOUTUBE UPDATE ERROR] {str(e)}")
+            say(f"[YOUTUBE UPDATE ERROR] {str(e)}")
             return False
 
 
@@ -306,20 +374,20 @@ def setup_youtube_credentials_file(client_id, client_secret, redirect_uri="http:
             }
         }
         
-        with open("youtube_credentials.json", "w") as f:
+        with open(os.path.join(_HERE, "youtube_credentials.json"), "w") as f:
             json.dump(credentials_data, f, indent=2)
         
-        print("[YOUTUBE] ✓ Credentials file created: youtube_credentials.json")
+        say("[YOUTUBE] ✓ Credentials file created: youtube_credentials.json")
         return True
     
     except Exception as e:
-        print(f"[YOUTUBE CREDENTIALS ERROR] {str(e)}")
+        say(f"[YOUTUBE CREDENTIALS ERROR] {str(e)}")
         return False
 
 
 if __name__ == "__main__":
     # Test YouTube uploader
-    print("Testing YouTube uploader...")
+    say("Testing YouTube uploader...")
     
     # Re example
     # setup_youtube_credentials_file("your_client_id", "your_client_secret")

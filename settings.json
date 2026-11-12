@@ -1,0 +1,18 @@
+{
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "blur_strength": 18,
+    "encoder": "auto",
+    "preset": "fast",
+    "crf": 23,
+    "audio_bitrate": "128k",
+    "loudnorm": true
+  },
+  "branding": {
+    "watermark": "",
+    "source_credit": "",
+    "font": "C:/Windows/Fonts/arialbd.ttf",
+    "font_size": 44
+  }
+}

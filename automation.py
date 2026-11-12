@@ -7,17 +7,8 @@ import threading
 import time
 
 def auto_email_checker():
-    """Automatically check email in the background"""
-    try:
-        while True:
-            # Check email periodically (every 5 minutes)
-            time.sleep(300)
-            
-            print("[EMAIL] Background email check...")
-            # Implement email checking if needed
-            
-    except Exception as e:
-        print(f"[AUTOMATION ERROR] {e}")
+    """Compatibility no-op: email is never checked automatically."""
+    print("[EMAIL] Automatic email checking is disabled; use an explicit command.")
 
 def auto_backup():
     """Automatically backup important files"""
@@ -45,8 +36,12 @@ def auto_backup():
 def schedule_task(task_name, interval_seconds, function):
     """Schedule a task to run at intervals"""
     def scheduler():
-        while True:
+        from control import is_cancelled
+
+        while not is_cancelled():
             time.sleep(interval_seconds)
+            if is_cancelled():
+                break
             try:
                 function()
                 print(f"[TASK] {task_name} executed")

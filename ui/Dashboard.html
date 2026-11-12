@@ -1,0 +1,262 @@
+{% raw %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.R.V.I.S — Command Deck</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#04060d;--cy:#22e4ff;--vi:#8b5cf6;--pk:#ff3df2;--gr:#3dffa2;--am:#ffb020;--rd:#ff4d6d;--tx:#d6f3ff;--mu:#6f8aa0;
+--card:rgba(10,18,34,.62);--bd:rgba(34,228,255,.2)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--tx);font:500 15px/1.4 Rajdhani,"Segoe UI",system-ui,sans-serif;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:-50%;z-index:-2;background:
+radial-gradient(circle at 20% 20%,rgba(139,92,246,.22),transparent 40%),radial-gradient(circle at 80% 70%,rgba(34,228,255,.16),transparent 45%);
+animation:drift 18s ease-in-out infinite alternate}
+body:after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:
+linear-gradient(rgba(34,228,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(34,228,255,.06) 1px,transparent 1px);
+background-size:44px 44px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 80%)}
+@keyframes drift{to{transform:translate(4%,3%) rotate(6deg)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes sweep{to{background-position:200% 0}}
+header{display:flex;align-items:center;gap:18px;padding:16px 26px;border-bottom:1px solid var(--bd);backdrop-filter:blur(10px);position:sticky;top:0;z-index:5;background:rgba(4,6,13,.7)}
+.logo{width:52px;height:52px;flex:none}
+.logo .r1{transform-origin:50% 50%;animation:spin 9s linear infinite}
+.logo .r2{transform-origin:50% 50%;animation:spin 5s linear infinite reverse}
+h1{font:900 22px Orbitron,sans-serif;letter-spacing:.28em;background:linear-gradient(90deg,var(--cy),var(--vi),var(--pk),var(--cy));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 6s linear infinite}
+.sub{color:var(--mu);font-size:12px;letter-spacing:.3em;text-transform:uppercase}
+.sp{flex:1}
+.clock{font:700 20px Orbitron,monospace;color:var(--cy);text-align:right}
+.clock small{display:block;font:500 11px Rajdhani;color:var(--mu);letter-spacing:.2em}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--bd);border-radius:99px;font:600 12px Orbitron;letter-spacing:.14em}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--rd);box-shadow:0 0 10px var(--rd)}
+.on .dot{background:var(--gr);box-shadow:0 0 12px var(--gr);animation:pulse 1.6s infinite}
+main{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;padding:22px 26px;max-width:1600px;margin:auto}
+.card{grid-column:span 4;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;position:relative;backdrop-filter:blur(12px);box-shadow:0 0 40px rgba(34,228,255,.05) inset,0 10px 40px rgba(0,0,0,.4);transition:.3s}
+.card:hover{border-color:rgba(34,228,255,.5);box-shadow:0 0 40px rgba(34,228,255,.1) inset,0 0 26px rgba(34,228,255,.12)}
+.card:before,.card:after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--cy);opacity:.8}
+.card:before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:14px 0 0 0}
+.card:after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-radius:0 0 14px 0}
+.w8{grid-column:span 8}.w12{grid-column:span 12}.w6{grid-column:span 6}
+h2{font:700 12px Orbitron;letter-spacing:.24em;color:var(--cy);margin-bottom:14px;display:flex;align-items:center;gap:10px;text-transform:uppercase}
+h2 i{flex:1;height:1px;background:linear-gradient(90deg,var(--bd),transparent)}
+.gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.g{text-align:center}
+.g svg{width:100%;max-width:120px;transform:rotate(-90deg)}
+.g .tr{stroke:rgba(255,255,255,.07)}
+.g .pr{transition:stroke-dashoffset .8s,stroke .4s;filter:drop-shadow(0 0 5px currentColor)}
+.g b{display:block;font:700 18px Orbitron;margin-top:-76px;height:76px;line-height:76px}
+.g span{font-size:12px;color:var(--mu);letter-spacing:.15em;text-transform:uppercase}
+#spark{width:100%;height:70px;margin-top:12px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(255,255,255,.07);font-size:14px}
+.row:last-child{border:0}.row em{color:var(--mu);font-style:normal}
+.bar{height:5px;background:rgba(255,255,255,.07);border-radius:9px;overflow:hidden;margin-top:4px}
+.bar div{height:100%;background:linear-gradient(90deg,var(--cy),var(--vi));transition:width .6s}
+input,select,button,textarea{font:600 14px Rajdhani,sans-serif;color:var(--tx)}
+input,select{width:100%;background:rgba(0,0,0,.35);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;outline:0;transition:.2s}
+input:focus,select:focus{border-color:var(--cy);box-shadow:0 0 14px rgba(34,228,255,.25)}
+select option{background:#0a1222}
+.f{display:grid;gap:10px}.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:11px;letter-spacing:.2em;color:var(--mu);text-transform:uppercase;display:block;margin-bottom:4px}
+.btn{cursor:pointer;border:0;border-radius:9px;padding:12px 18px;font:700 12px Orbitron;letter-spacing:.2em;text-transform:uppercase;color:#031018;background:linear-gradient(90deg,var(--cy),var(--vi));transition:.25s;box-shadow:0 0 20px rgba(34,228,255,.3)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 0 32px rgba(139,92,246,.6)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;filter:grayscale(.6)}
+.btn.sm{padding:6px 10px;font-size:10px;background:transparent;border:1px solid var(--rd);color:var(--rd);box-shadow:none}
+.term{background:#02050a;border:1px solid var(--bd);border-radius:10px;padding:12px;height:230px;overflow:auto;font:13px/1.55 Consolas,"Courier New",monospace;color:#9fe9ff}
+.term div{white-space:pre-wrap;word-break:break-word}
+.term .ok{color:var(--gr)}.term .er{color:var(--rd)}.term .sm{color:var(--pk)}.term .cp{color:var(--am)}
+.stat{display:flex;align-items:center;justify-content:space-between;margin:12px 0}
+.st{font:700 11px Orbitron;letter-spacing:.2em;padding:5px 12px;border-radius:99px;border:1px solid var(--mu);color:var(--mu)}
+.st.run{color:var(--am);border-color:var(--am);animation:pulse 1.2s infinite}.st.done{color:var(--gr);border-color:var(--gr)}
+.links a{color:var(--cy);text-decoration:none;display:block;font-size:13px;margin-top:4px}
+.list{max-height:260px;overflow:auto;display:grid;gap:8px}
+.it{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.035);border-left:3px solid var(--cy);border-radius:6px;font-size:14px}
+.it .m{flex:1}.it small{display:block;color:var(--mu);font-size:12px}
+.it.warning{border-color:var(--am)}.it.urgent{border-color:var(--rd)}.it.notification{border-color:var(--vi)}
+.empty{color:var(--mu);text-align:center;padding:18px;font-size:13px;letter-spacing:.1em}
+.badge{font:700 11px Orbitron;color:var(--gr);border:1px solid var(--gr);padding:2px 8px;border-radius:99px}
+.toast{position:fixed;right:22px;bottom:22px;background:rgba(10,18,34,.95);border:1px solid var(--cy);padding:12px 18px;border-radius:10px;transform:translateY(90px);opacity:0;transition:.35s;z-index:9;box-shadow:0 0 30px rgba(34,228,255,.3)}
+.toast.show{transform:none;opacity:1}
+.stepline{font:600 16px Rajdhani;color:var(--cy);margin-bottom:8px;min-height:22px}.pbar{height:6px;background:rgba(255,255,255,.07);border-radius:9px;overflow:hidden}.pbar div{height:100%;width:0;background:linear-gradient(90deg,var(--cy),var(--gr));transition:width .5s}.it .ic{font-size:18px;width:26px;text-align:center}.it.run{border-color:var(--am)}.it.run .ic{animation:pulse 1s infinite}.it.done{border-color:var(--gr)}.it.failed{border-color:var(--rd)}.it.saved{border-color:var(--vi)}
+::-webkit-scrollbar{width:7px}::-webkit-scrollbar-thumb{background:rgba(34,228,255,.3);border-radius:9px}
+@media(max-width:1000px){.card,.w8,.w6{grid-column:span 12}.gauges{grid-template-columns:repeat(2,1fr)}header{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+ <svg class="logo" viewBox="0 0 100 100" fill="none">
+  <circle cx="50" cy="50" r="46" stroke="#22e4ff" stroke-opacity=".3" stroke-width="2"/>
+  <g class="r1"><circle cx="50" cy="50" r="38" stroke="#22e4ff" stroke-width="3" stroke-dasharray="40 14"/></g>
+  <g class="r2"><circle cx="50" cy="50" r="28" stroke="#8b5cf6" stroke-width="3" stroke-dasharray="14 10"/></g>
+  <circle cx="50" cy="50" r="12" fill="#22e4ff"><animate attributeName="r" values="10;14;10" dur="2.4s" repeatCount="indefinite"/></circle>
+ </svg>
+ <div><h1>J.A.R.V.I.S</h1><div class="sub">Command Deck · AGI Assistant</div></div>
+ <div class="sp"></div>
+ <div class="chip" id="conn"><span class="dot"></span><span id="connT">OFFLINE</span></div>
+ <div class="clock"><span id="time">--:--:--</span><small id="date"></small></div>
+</header>
+
+<main>
+ <section class="card w8">
+  <h2>System Core<i></i><span class="badge" id="plat">LIVE</span></h2>
+  <div class="gauges" id="gauges"></div>
+  <svg id="spark" viewBox="0 0 400 70" preserveAspectRatio="none"><defs><linearGradient id="sg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#22e4ff" stop-opacity=".4"/><stop offset="1" stop-color="#22e4ff" stop-opacity="0"/></linearGradient></defs><path id="sa" fill="url(#sg)"/><polyline id="sl" fill="none" stroke="#22e4ff" stroke-width="2"/></svg>
+  <div class="sub" style="margin-top:4px">CPU load · last 60 seconds</div>
+ </section>
+
+ <section class="card">
+  <h2>Resources<i></i></h2>
+  <div id="res"></div>
+  <h2 style="margin-top:16px">Top Processes<i></i></h2>
+  <div id="procs"></div>
+ </section>
+
+ <section class="card w6">
+  <h2>Shorts Studio<i></i></h2>
+  <div class="f">
+   <div><label>Video link</label><input id="sUrl" placeholder="https://www.youtube.com/watch?v=..."></div>
+   <div class="f2">
+    <div><label>Clips</label><select id="sN"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
+    <div><label>Visibility</label><select id="sP"><option value="public">Public</option><option value="unlisted">Unlisted</option><option value="private">Private</option></select></div>
+   </div>
+   <button class="btn" id="sGo">⚡ Find viral moments &amp; upload</button>
+  <button class="btn" id="dGo" type="button">📅 Run daily clips</button>
+  </div>
+  <div class="stat"><span class="sub">Mission status</span><span class="st" id="sSt">IDLE</span></div>
+  <div class="stepline" id="sStep">Awaiting orders, sir…</div>
+  <div class="pbar"><div id="sBar"></div></div>
+  <div class="list" id="sClips" style="margin:12px 0;max-height:none"></div>
+  <div class="sub" style="margin-bottom:6px">Mission log</div>
+  <div class="term" id="term" style="height:170px"><div style="color:var(--mu)">Mission log will appear here…</div></div>
+  <div class="links" id="sRes"></div>
+ </section>
+
+ <section class="card w6">
+  <h2>Alerts &amp; Reminders<i></i></h2>
+  <div class="f">
+   <div><label>Title</label><input id="aT" placeholder="Call the team"></div>
+   <div class="f2">
+    <div><label>In minutes</label><input id="aM" type="number" min="1" value="10"></div>
+    <div><label>Type</label><select id="aY"><option>reminder</option><option>notification</option><option>warning</option><option>urgent</option></select></div>
+   </div>
+   <button class="btn" id="aGo">＋ Arm alert</button>
+  </div>
+  <div class="list" id="alerts" style="margin-top:14px"></div>
+ </section>
+
+ <section class="card w6"><h2>Event Stream<i></i><span class="sub">last 60 min</span></h2><div class="list" id="events"></div></section>
+ <section class="card w6"><h2>Workflows<i></i></h2><div class="list" id="flows"></div></section>
+ <section class="card w12"><h2>Shorts Performance<i></i></h2><div class="list" id="performance"></div></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const jget=async p=>(await fetch(p)).json();
+const jsend=async(p,m,b)=>(await fetch(p,{method:m,headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined})).json();
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),3200)}
+
+/* clock */
+setInterval(()=>{const d=new Date();$("#time").textContent=d.toLocaleTimeString([], {hour12:false});$("#date").textContent=d.toLocaleDateString([], {weekday:"long",month:"short",day:"numeric"}).toUpperCase()},1000);
+
+/* gauges */
+const C=2*Math.PI*42;
+function col(p){return p>85?"#ff4d6d":p>65?"#ffb020":"#22e4ff"}
+function gauge(id,label,p,txt){
+  let g=document.getElementById("g_"+id);
+  if(!g){g=document.createElement("div");g.className="g";g.id="g_"+id;
+   g.innerHTML=`<svg viewBox="0 0 100 100"><circle class="tr" cx="50" cy="50" r="42" fill="none" stroke-width="8"/><circle class="pr" cx="50" cy="50" r="42" fill="none" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg><b></b><span>${label}</span>`;
+   $("#gauges").appendChild(g)}
+  const pr=g.querySelector(".pr");pr.style.strokeDashoffset=C*(1-Math.min(p,100)/100);pr.style.stroke=col(p);pr.style.color=col(p);
+  g.querySelector("b").textContent=txt}
+const hist=[];
+function spark(v){hist.push(v);if(hist.length>60)hist.shift();
+  const pts=hist.map((y,i)=>[i*(400/59),68-y*0.66]);
+  $("#sl").setAttribute("points",pts.map(p=>p.join(",")).join(" "));
+  $("#sa").setAttribute("d","M"+pts.map(p=>p.join(",")).join(" L")+` L${pts.at(-1)[0]},70 L${pts[0][0]},70 Z`)}
+const bar=(n,p,t)=>`<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>${n}</span><em>${t}</em></div><div class="bar"><div style="width:${Math.min(p,100)}%"></div></div></div>`;
+
+async function stats(){
+  try{
+   const d=await jget("/api/stats");$("#conn").classList.add("on");$("#connT").textContent="ONLINE";
+   if(!d.success)return;
+   const cpu=d.cpu||{},m=d.memory||{},k=d.disk||{},b=d.battery;
+   gauge("cpu","CPU",cpu.usage_percent||0,Math.round(cpu.usage_percent||0)+"%");
+   gauge("ram","Memory",m.percent||0,Math.round(m.percent||0)+"%");
+   gauge("dsk","Disk",k.percent||0,Math.round(k.percent||0)+"%");
+   gauge("bat","Power",b?b.percent:100,b?Math.round(b.percent)+"%":"AC");
+   spark(cpu.usage_percent||0);
+   $("#res").innerHTML=bar("Memory",m.percent||0,`${(m.used_gb||0).toFixed(1)} / ${(m.total_gb||0).toFixed(1)} GB`)
+    +bar("Disk",k.percent||0,`${(k.free_gb||0).toFixed(0)} GB free`)
+    +`<div class="row"><span>CPU cores</span><em>${cpu.core_count||"–"} @ ${(cpu.frequency_ghz||0).toFixed(2)} GHz</em></div>`;
+   const pr=(d.processes||[]).slice(0,5);
+   $("#procs").innerHTML=pr.length?pr.map(p=>`<div class="row"><span>${esc(p.name||p[0])}</span><em>${(+(p.cpu_percent??p.cpu??0)).toFixed(1)}%</em></div>`).join(""):'<div class="empty">NO DATA</div>';
+  }catch(e){$("#conn").classList.remove("on");$("#connT").textContent="OFFLINE"}}
+
+/* shorts */
+const lineCls=l=>/error|failed|✗/i.test(l)?"er":/✓|uploaded|success/i.test(l)?"ok":/\[SMART\]|\[PICKER\]/.test(l)?"sm":/\[CAPTIONS\]/.test(l)?"cp":"";
+const ICON={queued:"⏳",downloading:"⬇️",cutting:"✂️",captioning:"✍️",uploading:"⬆️",done:"✅",failed:"❌",saved:"💾"};
+const LABEL={queued:"Waiting",downloading:"Downloading clip section",cutting:"Cutting vertical Short",captioning:"Writing viral caption",uploading:"Uploading to YouTube",done:"Uploaded",failed:"Failed",saved:"Saved locally"};
+const mmss=t=>Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0");
+let prev={},wasRun=false;
+async function shorts(){
+  try{
+   const s=await jget("/api/shorts/status");if(!s.success)return;
+   if(s.running&&!wasRun)prev={};
+   $("#sStep").textContent=s.step||"";
+   const cl=s.clips||[],fin=cl.filter(c=>["done","failed","saved"].includes(c.status)).length;
+   $("#sBar").style.width=(s.total?Math.round(fin/s.total*100):0)+"%";
+   $("#sClips").innerHTML=cl.map(c=>{const k=c.status==="queued"?"":["done","failed","saved"].includes(c.status)?c.status:"run";
+     return `<div class="it ${k}"><span class="ic">${ICON[c.status]||"•"}</span><div class="m"><b>Clip ${c.n}</b>${c.start!=null?" · from "+mmss(c.start):""} — ${LABEL[c.status]||esc(c.status)}`
+      +(c.title?`<small>${esc(c.title)}</small>`:"")+(c.reason?`<small>🔥 ${esc(c.reason)}</small>`:"")+(c.detail?`<small>${esc(c.detail)}</small>`:"")
+      +(c.url?`<small><a style="color:var(--cy)" href="${esc(c.url)}" target="_blank">${esc(c.url)}</a></small>`:"")+`</div></div>`}).join("");
+   cl.forEach(c=>{if(prev[c.n]!==c.status){if(c.status==="done")toast("Clip "+c.n+" uploaded ✓");if(c.status==="failed")toast("Clip "+c.n+" failed");if(c.status==="cutting")toast("Clip "+c.n+" downloaded ✓");prev[c.n]=c.status}});
+   const t=$("#term");
+   if(s.log.length){const near=t.scrollTop+t.clientHeight>=t.scrollHeight-40;
+     t.innerHTML=s.log.map(l=>`<div class="${lineCls(l)}">${esc(l)}</div>`).join("");if(near)t.scrollTop=t.scrollHeight}
+   const st=$("#sSt");st.className="st"+(s.running?" run":s.result.length?" done":"");
+   st.textContent=s.running?"RUNNING":s.result.length?"COMPLETE":"IDLE";
+   $("#sGo").disabled=s.running;
+   $("#sRes").innerHTML=(s.result||[]).map(v=>`<a href="https://www.youtube.com/shorts/${esc(v)}" target="_blank">▶ youtube.com/shorts/${esc(v)}</a>`).join("");
+   if(wasRun&&!s.running)toast(s.result.length?"Mission complete ✓":"Job finished — check the log");
+   wasRun=s.running;
+  }catch(e){}}
+$("#sGo").onclick=async()=>{
+  const r=await jsend("/api/shorts","POST",{url:$("#sUrl").value,clips:+$("#sN").value,privacy:$("#sP").value});
+  if(r.success){toast("Mission launched");wasRun=true;shorts()}else toast(r.error||"Could not start")};
+$("#dGo").onclick=async()=>{
+  const r=await jsend("/api/daily-clips","POST",{limit:10});
+  if(r.success){toast("Daily clips launched");wasRun=true;shorts()}else toast(r.error||"Could not start daily clips")};
+
+/* alerts */
+async function alerts(){
+  try{const d=await jget("/api/alerts");const a=(d.alerts||[]).filter(x=>x.status!=="deleted");
+   $("#alerts").innerHTML=a.length?a.map(x=>`<div class="it ${esc(x.type)}"><div class="m">${esc(x.title)}<small>${esc(x.type)} · ${esc(x.trigger_time)}${x.triggered?" · fired":""}</small></div><button class="btn sm" onclick="delAlert(${+x.id})">✕</button></div>`).join(""):'<div class="empty">NO ACTIVE ALERTS</div>'}catch(e){}}
+async function delAlert(id){await jsend("/api/alerts/"+id,"DELETE");alerts()}
+$("#aGo").onclick=async()=>{
+  const title=$("#aT").value.trim();if(!title)return toast("Give the alert a title");
+  const r=await jsend("/api/alerts","POST",{title,minutes:+$("#aM").value||10,type:$("#aY").value});
+  if(r.success){$("#aT").value="";toast("Alert armed");alerts()}else toast(r.error||"Failed")};
+
+/* events + workflows */
+async function events(){
+  try{const d=await jget("/api/events?minutes=60");const e=(d.events||[]).slice(-25).reverse();
+   $("#events").innerHTML=e.length?e.map(x=>`<div class="it"><div class="m">${esc(x.title||x.message||x.description||x.type||x.event||JSON.stringify(x))}<small>${esc(x.timestamp||"")}</small></div></div>`).join(""):'<div class="empty">NO RECENT EVENTS</div>'}catch(e){}}
+async function flows(){
+  try{const d=await jget("/api/workflows");const w=d.workflows||{};const ks=Array.isArray(w)?w.map(x=>x.name):Object.keys(w);
+   $("#flows").innerHTML=ks.length?ks.map(k=>{const x=Array.isArray(w)?w.find(y=>y.name===k):w[k];
+     return `<div class="it" style="border-color:var(--vi)"><div class="m">${esc(k)}<small>${esc(x.description||x.trigger||"workflow")} · runs: ${+x.executions||0}</small></div></div>`}).join(""):'<div class="empty">NO WORKFLOWS</div>'}catch(e){}}
+  async function performance(){
+   try{const d=await jget("/api/performance");const p=d.performance||{};const ks=Object.keys(p);
+    $("#performance").innerHTML=ks.length?ks.map(k=>`<div class="it" style="border-color:var(--gr)"><div class="m">${esc(k)}<small>Views: ${Math.round(p[k].views||0)} · Likes: ${Math.round(p[k].likes||0)}</small></div></div>`).join(""):'<div class="empty">NO METRICS YET</div>'}catch(e){}}
+
+  stats();alerts();events();flows();performance();shorts();
+setInterval(stats,2000);setInterval(shorts,1500);setInterval(events,6000);setInterval(()=>{alerts();flows()},10000);
+</script>
+</body>
+</html>
+{% endraw %}

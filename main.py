@@ -10,12 +10,12 @@ import requests
 from voice import listen, stop_listening
 from ai import ask_ai_text, decide_action, parse_intent, is_casual_query, handle_casual_query
 from actions import *
-from automation import auto_email_checker
-from workflow_engine import email_monitor, daily_routine, smart_tasks, email_monitor_smart
+from workflow_engine import daily_routine, smart_tasks
 from agi_agent import agi_agent
 from memory import remember, recall
 from utils import speak
 from agi_engine import agi_engine
+from control import clear_cancel, request_cancel, shutdown_event
 from conversation_memory import get_memory, add_to_memory, get_context_for_query, get_current_topic
 from smart_messages import (
     should_open_notepad, open_notepad_for_dictation, 
@@ -123,6 +123,19 @@ except Exception as e:
 UI_API_URL = "http://127.0.0.1:8000/api/ui-message"
 last_ui_message = None  # Prevent duplicate messages
 
+import re
+
+
+def clean_music_query(command):
+    """Extract the song/artist from a spoken 'play ...' command."""
+    q = command.lower().strip()
+    q = re.sub(r"\b(on|from|in|using)\s+spotify\b", "", q)
+    q = re.sub(r"^(please\s+)?(play|put on)\s+", "", q)
+    q = re.sub(r"\bspotify\b", "", q).strip()
+    if q in ("music", "some music", "songs", "some songs", "a song", "something"):
+        return ""
+    return q
+
 def send_to_ui(message_type, text):
     """Send user or assistant message to web UI for transcript display"""
     global last_ui_message
@@ -160,7 +173,7 @@ def speak_and_ui(response_text):
 def get_relevant_articles(query):
     """Fetch relevant articles and websites for any query"""
     try:
-        import webbrowser
+        pass  # webbrowser imported at top of file
         
         # Build search URLs
         google_search = f"https://www.google.com/search?q={query.replace(' ', '+')}"
@@ -220,6 +233,9 @@ except Exception as e:
 # -----------------------
 def force_shutdown():
     """FORCEFULLY shutdown everything - NO mercy"""
+    global RUNNING
+    RUNNING = False
+    shutdown_event.set()
     print("\n[FORCE SHUTDOWN] NUCLEAR OPTION - Terminating all audio...")
     
     # 1. Stop listening globally
@@ -375,6 +391,13 @@ def get_smart_intent(command):
         # Fast keyword matching - no AI needed for obvious commands
         cmd_lower = command.lower()
         print(f"[INTENT] Analyzing: '{cmd_lower}'")
+
+        if "run daily clips" in cmd_lower or "daily clips" == cmd_lower.strip():
+            print("[INTENT] Detected DAILY CLIPS keyword")
+            return {"intent": "daily_clips", "target": command, "confidence": 1.0}
+        if "add channel" in cmd_lower or "remove channel" in cmd_lower:
+            print("[INTENT] Detected CHANNEL MANAGEMENT keyword")
+            return {"intent": "channel_management", "target": command, "confidence": 1.0}
         
         if any(word in cmd_lower for word in ["email", "mail", "send"]):
             print("[INTENT] [OK] Detected EMAIL keyword")
@@ -617,16 +640,20 @@ Respond ONLY with TIME:value|TEXT:value format."""
 # EMAIL CHECK - Smart email checking
 # -----------------------
 def check_emails_smart():
-    """Check emails using smart email handler"""
+    """Read unread email subjects once, only after an explicit request."""
     try:
-        from automation import auto_email_checker
-        result = auto_email_checker()
-        if result:
-            print("[EMAIL] Emails checked successfully")
+        subjects = check_emails()
+        if not subjects:
+            print("[EMAIL] No unread emails")
+            speak("You have no unread emails.")
             return True
-        else:
-            print("[EMAIL] No emails or error checking emails")
-            return False
+        print(f"[EMAIL] Found {len(subjects)} unread email(s)")
+        speak(f"You have {len(subjects)} unread email(s).")
+        for subject in subjects:
+            if shutdown_event.is_set():
+                return False
+            speak(subject)
+        return True
     except Exception as e:
         print(f"[EMAIL ERROR] {str(e)}")
         return False
@@ -762,8 +789,21 @@ def smart_read_news(query="general"):
 # MAIN EXECUTION (AI BRAIN)
 # -----------------------
 def execute(command):
+    global RUNNING
     command = command.lower().strip()
     print(f"\n[EXECUTE] Processing: {command}")
+
+    if command == "stop":
+        print("[CONTROL] Bare stop received; shutting down JARVIS")
+        force_shutdown()
+        return
+    if command.startswith("stop "):
+        target = command[5:].strip()
+        request_cancel()
+        speak(f"Stopping {target}.")
+        print(f"[CONTROL] Cancellation requested for: {target}")
+        return
+    clear_cancel()
     
     # Track command execution for ML learning
     if ML_AVAILABLE:
@@ -812,7 +852,7 @@ def execute(command):
                 search_query = command.replace("open", "").replace("visit", "").replace("browse", "").replace("show me", "").strip()
                 if search_query:
                     google_url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}"
-                    import webbrowser
+                    pass  # webbrowser imported at top of file
                     webbrowser.open(google_url, new=1)
                     speak(f"Searching for {search_query}")
                 else:
@@ -827,7 +867,7 @@ def execute(command):
     if intent == "play_music":
         try:
             # Extract song/artist from command
-            music_query = command.replace("play", "").replace("music", "").replace("spotify", "").strip()
+            music_query = clean_music_query(command)
             
             if not music_query or music_query == "":
                 speak("Please tell me what you want to play")
@@ -842,17 +882,17 @@ def execute(command):
                 print(f"[MUSIC] Spotify failed, falling back to YouTube")
                 speak(f"Spotify is not available. Opening {music_query} on YouTube instead")
                 youtube_url = f"https://www.youtube.com/results?search_query={music_query.replace(' ', '+')}"
-                import webbrowser
+                pass  # webbrowser imported at top of file
                 webbrowser.open(youtube_url, new=1)
                 print(f"[MUSIC] Opened YouTube: {music_query}")
         except Exception as e:
             print(f"[MUSIC ERROR] {type(e).__name__}: {e}")
             speak("Could not play music. Opening YouTube instead.")
             try:
-                music_query = command.replace("play", "").replace("music", "").replace("spotify", "").strip()
+                music_query = clean_music_query(command)
                 if music_query:
                     youtube_url = f"https://www.youtube.com/results?search_query={music_query.replace(' ', '+')}"
-                    import webbrowser
+                    pass  # webbrowser imported at top of file
                     webbrowser.open(youtube_url, new=1)
             except:
                 pass
@@ -861,12 +901,51 @@ def execute(command):
     # -----------------------
     # 📱 YOUTUBE SHORTS
     # -----------------------
+    if intent == "channel_management":
+        try:
+            from discovery import add_channel, remove_channel
+            words = command.split()
+            action = "remove" if "remove channel" in command else "add"
+            marker = words.index("channel")
+            channel_id = words[marker + 1] if len(words) > marker + 1 else ""
+            if not channel_id:
+                speak("Tell me the YouTube channel ID.")
+                return
+            if action == "remove":
+                removed = remove_channel(channel_id)
+                speak("Channel removed." if removed else "That channel is not on the allowlist.")
+            else:
+                name = " ".join(words[marker + 2:]) or channel_id
+                add_channel(channel_id, name, "entertainment", f"Clip from {name}")
+                speak(f"Added {name} to the permitted clipping channels.")
+        except Exception as error:
+            print(f"[CHANNEL ERROR] {error}")
+            speak("I could not update the channel allowlist.")
+        return
+
+    if intent == "daily_clips":
+        try:
+            from daily import run_daily_clips
+            speak("Starting today's Shorts batch. I will handle the rest automatically.")
+            threading.Thread(target=run_daily_clips, kwargs={"limit": 10}, daemon=True).start()
+        except Exception as error:
+            print(f"[DAILY CLIPS ERROR] {error}")
+            speak("I could not start the daily clips batch.")
+        return
+
     if intent == "youtube_shorts":
         try:
             from actions import create_youtube_shorts
+            from daily import run_daily_clips
             
             print(f"[SHORTS] YouTube Shorts command: {command}")
-            speak("I'll help you create YouTube Shorts!")
+            speak("Would you like to paste a video link, or should I scan your permitted channels and run the daily workflow?")
+            choice = (listen() or input("Type link or daily: ")).strip().lower()
+
+            if choice in {"daily", "scan", "scan youtube", "daily clips"}:
+                speak("Starting the daily YouTube Shorts workflow.")
+                threading.Thread(target=run_daily_clips, kwargs={"limit": 10}, daemon=True).start()
+                return
             
             # Ask for video URL via terminal input
             print("\n" + "="*60)
@@ -1057,7 +1136,7 @@ def execute(command):
             print(f"[NEWS] Fallback mode")
             speak(f"Opening news websites about {target if target else 'general news'}")
             try:
-                import webbrowser
+                pass  # webbrowser imported at top of file
                 webbrowser.open("https://www.reddit.com/r/news/", new=1)
                 webbrowser.open("https://bbc.com/news", new=1)
             except:
@@ -1393,7 +1472,7 @@ def execute(command):
                 speak("I've opened restaurants on Google Maps for you")
             else:
                 speak("No restaurants found. Let me open Google Maps for you.")
-                import webbrowser
+                pass  # webbrowser imported at top of file
                 webbrowser.open("https://www.google.com/maps/search/restaurants/")
         except ImportError:
             speak("Restaurant finder not available yet")
@@ -1884,7 +1963,7 @@ def execute(command):
         # 🌐 Open Chrome for visual results
         print("[WEB] Opening relevant websites in Chrome...")
         try:
-            import webbrowser
+            pass  # webbrowser imported at top of file
             import time
             
             search_query = command.replace(" ", "+").lower()
@@ -1911,11 +1990,8 @@ def execute(command):
 # THREADS
 # -----------------------
 threading.Thread(target=stop_listener, daemon=True).start()
-threading.Thread(target=auto_email_checker, daemon=True).start()
-threading.Thread(target=email_monitor, daemon=True).start()
 threading.Thread(target=daily_routine, daemon=True).start()
 threading.Thread(target=smart_tasks, daemon=True).start()
-threading.Thread(target=email_monitor_smart, daemon=True).start()
 
 # NEW FEATURE THREADS
 if NEW_FEATURES_AVAILABLE:

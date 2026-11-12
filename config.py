@@ -1,33 +1,41 @@
-MODEL_NAME = "llama-3.1-8b-instant"
+"""Environment-backed configuration for JARVIS."""
 
-EMAIL_SENDER = "aaryathota2@gmail.com"
-EMAIL_PASSWORD = "tpgmzpubsehtfbwe"
-SPOTIFY_CLIENT_ID = "9f64fb3b523a47b6a43f7d3e0075b683"
-SPOTIFY_CLIENT_SECRET = "95298b7002424b28bd77f16d778a178f"
-SPOTIFY_REDIRECT_URI = "http://127.0.0.1:9999/callback"
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
+
+EMAIL_SENDER = os.getenv("EMAIL_SENDER", "")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:9999/callback")
 
 # ========================
 # VIDEO AUTOMATION CONFIG
 # ========================
 # Creatomate (Video Generator)
-CREATOMATE_API_KEY = "8a0b8fdbd7f34a0ea7699951000c5be1f916f1f405eb9b213ab4053ac53fbc0ae8c99f160656ebf0e3845d73ce842f46"  # Add your Creatomate API key here
-CREATOMATE_TEMPLATE_ID = "4e9d03cb-eada-480d-a4d8-c70032eb6487"  # Add your Creatomate template ID here
+CREATOMATE_API_KEY = os.getenv("CREATOMATE_API_KEY", "")
+CREATOMATE_TEMPLATE_ID = os.getenv("CREATOMATE_TEMPLATE_ID", "")
 
 # YouTube (Video Upload)
-YOUTUBE_CLIENT_ID = "484461843626-j7kramh3ou246oect77i8i9pkv12c112.apps.googleusercontent.com"  # Add your YouTube OAuth Client ID
-YOUTUBE_CLIENT_SECRET = "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"  # Add your YouTube OAuth Client Secret
-YOUTUBE_REDIRECT_URI = "http://localhost:9999/"  # OAuth redirect URI
+YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:9999/")
 
 # Eleven Labs (Voice-over Generation)
-ELEVEN_LABS_API_KEY = "sk_ee793f480fcb2d6628016bbbe8950e885db672473960b7f5"  # Add your Eleven Labs API key here
+ELEVEN_LABS_API_KEY = os.getenv("ELEVEN_LABS_API_KEY", "")
 
 # PiAPI (Additional content features)
-PIAPI_KEY = "10431f0e2f5d333b7f59c8e179948fe57de4263ed19a1e4dbab211f9ad6ede5f"  # Add your PiAPI key here
+PIAPI_KEY = os.getenv("PIAPI_KEY", "")
 
 # Video Automation Settings
 VIDEO_UPLOAD_INTERVAL_HOURS = 24  # Generate and upload a video every 24 hours
 VIDEO_GENERATION_ENABLED = False  # Set to True to enable automatic video generation
 AUTO_UPLOAD_TO_YOUTUBE = False  # Set to True to automatically upload videos
-VIDEO_CATEGORY = "25"  # YouTube category (25=News & Politics, 10=Music, 28=Science & Technology, etc.)
-VIDEO_PRIVACY = "public"  # public, unlisted, or private
-VIDEO_BATCH_SIZE = 1  # Number of videos to generate in batch
+VIDEO_CATEGORY = os.getenv("VIDEO_CATEGORY", "24")
+VIDEO_PRIVACY = os.getenv("VIDEO_PRIVACY", "public")
+VIDEO_BATCH_SIZE = int(os.getenv("VIDEO_BATCH_SIZE", "1"))

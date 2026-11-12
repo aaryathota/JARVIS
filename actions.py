@@ -95,7 +95,9 @@ def add_reminder(text, speak_func=None):
 
 def reminder_loop():
     """Run reminders in background"""
-    while True:
+    from control import is_cancelled
+
+    while not is_cancelled():
         now = datetime.now()
         
         for r in reminders[:]:
@@ -103,6 +105,8 @@ def reminder_loop():
                 print(f"[REMINDER] {r['text']}")
                 reminders.remove(r)
         
+        if is_cancelled():
+            break
         time.sleep(20)
 
 # Start reminder thread
@@ -192,22 +196,29 @@ def smart_send_email(subject, listen, speak):
 # EMAIL CHECK
 # -----------------------
 def check_emails():
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
-    mail.login(EMAIL_SENDER, EMAIL_PASSWORD)
-    mail.select("inbox")
+    """Return unread subjects once, only when explicitly requested."""
+    mail = None
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        mail.select("inbox")
 
-    _, messages = mail.search(None, "UNSEEN")
-    ids = messages[0].split()
-
-    subjects = []
-    for i in ids:
-        _, msg_data = mail.fetch(i, "(RFC822)")
-        for part in msg_data:
-            if isinstance(part, tuple):
-                msg = email.message_from_bytes(part[1])
-                subjects.append(msg["subject"])
-
-    return subjects
+        _, messages = mail.search(None, "UNSEEN")
+        ids = messages[0].split()
+        subjects = []
+        for message_id in ids:
+            _, msg_data = mail.fetch(message_id, "(RFC822)")
+            for part in msg_data:
+                if isinstance(part, tuple):
+                    message = email.message_from_bytes(part[1])
+                    subjects.append(message.get("subject") or "(no subject)")
+        return subjects
+    finally:
+        if mail is not None:
+            try:
+                mail.logout()
+            except Exception:
+                pass
 
 # -----------------------
 # CALENDAR
@@ -582,7 +593,7 @@ def play_music_advanced(query):
 import requests
 from utils import speak
 
-NEWS_API_KEY = "89bf64644b914d38bdad748502063123"
+NEWS_API_KEY = os.getenv("NEWSAPI_KEY", "")
 
 def get_live_news(query):
     """Fetch live news from NewsAPI"""
