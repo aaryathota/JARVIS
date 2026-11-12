@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 
-CONV_FILE = "conversation_history.json"
+CONV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conversation_history.json")
 MAX_HISTORY = 20  # Keep last 20 exchanges
 
 class ConversationMemory:
@@ -96,12 +96,13 @@ class ConversationMemory:
                 context_info += f"- User: {exchange['user']}\n"
                 context_info += f"  Assistant: {exchange['response'][:100]}...\n"
         
-        # Add recent general context
+        # Always include the latest three exchanges so references like "that"
+        # and "what I said earlier" work even when topic extraction is vague.
         if self.history:
-            context_info += "\nRecent exchanges:\n"
+            context_info += "\nLast three exchanges (use only when relevant):\n"
             for exchange in self.history[-3:]:
-                if exchange.get("topic") != topic:  # Don't repeat topic info
-                    context_info += f"- {exchange['user'][:50]}...\n"
+                context_info += f"- User: {exchange.get('user', '')[:300]}\n"
+                context_info += f"  Assistant: {exchange.get('response', '')[:300]}\n"
         
         return context_info
     

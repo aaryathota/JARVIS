@@ -11,7 +11,17 @@ from conversation_memory import get_memory, add_to_memory, get_context_for_query
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-def ask_ai_text(prompt, max_tokens=500, use_context=True):
+DETAIL_PHRASES = (
+    "in detail", "deep dive", "be thorough", "long answer", "step by step",
+    "explain fully", "comprehensive",
+)
+
+
+def _wants_detail(prompt):
+    lowered = prompt.lower()
+    return any(phrase in lowered for phrase in DETAIL_PHRASES)
+
+def ask_ai_text(prompt, max_tokens=None, use_context=True):
     """Query Groq API for text responses with optional context"""
     try:
         # Prefer the ignored .env file; keep credentials.json as a legacy fallback.
@@ -33,6 +43,21 @@ def ask_ai_text(prompt, max_tokens=500, use_context=True):
             context = get_context_for_query(prompt)
             if context:
                 enhanced_prompt = f"{context}\n\nUser query: {prompt}"
+
+        detailed = _wants_detail(prompt)
+        answer_style = (
+            "Give a thorough, structured answer with useful detail."
+            if detailed else
+            "Answer concisely by default: 1-4 sentences or a short bullet list. "
+            "Use only the most relevant and recent information. Do not add background "
+            "the user did not request."
+        )
+        enhanced_prompt = (
+            "You are JARVIS, a practical assistant. "
+            f"{answer_style} If the user asks for current information, be clear about "
+            "what is known and do not invent facts.\n\n" + enhanced_prompt
+        )
+        token_limit = max_tokens or (900 if detailed else 260)
         
         # Call Groq API
         client = Groq(api_key=groq_key)
@@ -40,7 +65,7 @@ def ask_ai_text(prompt, max_tokens=500, use_context=True):
             model="openai/gpt-oss-120b",
             extra_body={"reasoning_effort": "low"},
             messages=[{"role": "user", "content": enhanced_prompt}],
-            max_tokens=max_tokens
+            max_tokens=token_limit
         )
         
         result = response.choices[0].message.content or ""
