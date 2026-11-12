@@ -43,13 +43,12 @@ def open_notepad_for_dictation(text, title="JARVIS Message"):
 def should_open_notepad(text):
     """
     Determine if response is large enough to warrant notepad
-    Threshold: more than 75 characters (frequently)
+    Threshold: more than 4000 characters
     """
     if not text:
         return False
     
-    # Check length - lowered to 75 chars for more frequent notepad opening
-    if len(text) > 75:
+    if len(text) > 4000:
         return True
     
     return False
