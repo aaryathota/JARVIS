@@ -53,7 +53,8 @@ Focus on:
 Format as JSON array with these exact fields: title, description, duration, hook, tags, estimated_views"""
 
         message = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
+            extra_body={"reasoning_effort": "low"},
             max_tokens=2000,
             messages=[
                 {"role": "user", "content": prompt}
@@ -91,7 +92,8 @@ def get_trending_video_concepts():
 Be specific about what's trending today. Format as JSON array with: concept, why_trending, potential_reach"""
         
         message = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
+            extra_body={"reasoning_effort": "low"},
             max_tokens=1500,
             messages=[
                 {"role": "user", "content": prompt}
@@ -123,7 +125,8 @@ Requirements:
 Format clearly with timestamps."""
         
         message = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
+            extra_body={"reasoning_effort": "low"},
             max_tokens=1500,
             messages=[
                 {"role": "user", "content": prompt}

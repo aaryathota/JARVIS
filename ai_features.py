@@ -76,7 +76,8 @@ Top match: [Would show here]"""
         
         try:
             message = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
+                extra_body={"reasoning_effort": "low"},
                 messages=[{
                     "role": "user",
                     "content": f"Generate {length} words on: {prompt}"
@@ -95,7 +96,8 @@ Top match: [Would show here]"""
         
         try:
             message = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
+                extra_body={"reasoning_effort": "low"},
                 messages=[{
                     "role": "user",
                     "content": f"Translate this to {target_language}. Only respond with the translation, nothing else:\n{text}"

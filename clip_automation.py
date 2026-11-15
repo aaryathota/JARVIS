@@ -212,11 +212,17 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                 uploader = None
             if os.getenv("INSTAGRAM_AUTO_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
                 try:
-                    from instagram_uploader import InstagramUploader
-                    instagram_uploader = InstagramUploader()
-                    if not instagram_uploader.is_authenticated:
-                        print("[INSTAGRAM] Auto-upload disabled for this run: authentication unavailable")
-                        instagram_uploader = None
+                    from instagram_graph import InstagramGraphUploader
+                    graph_uploader = InstagramGraphUploader()
+                    if graph_uploader.ready:
+                        instagram_uploader = graph_uploader
+                        print("[INSTAGRAM] Official Graph API uploader ready")
+                    else:
+                        from instagram_uploader import InstagramUploader
+                        instagram_uploader = InstagramUploader()
+                        if not instagram_uploader.is_authenticated:
+                            print("[INSTAGRAM] Auto-upload disabled: Graph API is not configured and login is unavailable")
+                            instagram_uploader = None
                 except Exception as e:
                     print(f"[INSTAGRAM] Auto-upload unavailable: {e}")
 

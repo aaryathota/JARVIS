@@ -1,0 +1,32 @@
+{
+  "morning_routine": {
+    "description": "Start your day with weather, news, and calendar",
+    "commands": [
+      "What's the weather today",
+      "Tell me the news",
+      "What's on my calendar today"
+    ],
+    "created": "2026-10-16 17:33:07",
+    "executions": 0
+  },
+  "work_mode": {
+    "description": "Get ready for work",
+    "commands": [
+      "What are my system stats",
+      "Check my emails",
+      "Show me my calendar"
+    ],
+    "created": "2026-10-16 17:33:07",
+    "executions": 0
+  },
+  "end_of_day": {
+    "description": "End your day summary",
+    "commands": [
+      "What happened while I was away",
+      "Summarize my tasks",
+      "Show me tomorrow's calendar"
+    ],
+    "created": "2026-10-16 17:33:07",
+    "executions": 0
+  }
+}

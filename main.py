@@ -971,14 +971,14 @@ def execute(command):
                 return
             
             print(f"\n✓ Got URL: {video_url}")
-            speak("Got it! How many clips would you like? Say 1, 2, 3, or 5.")
+            speak("Got it! How many clips would you like? Choose any number from 1 to 10.")
             
             # Ask for number of clips
             try:
                 clip_input = input("📊 Number of clips (default 2): ").strip()
                 num_clips = int(clip_input) if clip_input else 2
                 
-                if num_clips not in [1, 2, 3, 5]:
+                if not 1 <= num_clips <= 10:
                     num_clips = 2
                     print(f"Using default: 2 clips")
             except:
@@ -1033,14 +1033,14 @@ def execute(command):
                 return
             
             print(f"\n✓ Got URL: {video_url}")
-            speak("Got it! How many clips would you like? Say 1, 2, 3, or 5.")
+            speak("Got it! How many clips would you like? Choose any number from 1 to 10.")
             
             # Ask for number of clips
             try:
                 clip_input = input("📊 Number of clips to create (default 2): ").strip()
                 num_clips = int(clip_input) if clip_input else 2
                 
-                if num_clips not in [1, 2, 3, 5]:
+                if not 1 <= num_clips <= 10:
                     num_clips = 2
                     print(f"Using default: 2 clips")
             except:

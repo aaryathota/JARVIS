@@ -2,7 +2,7 @@
 Dashboard Server - Web UI for JARVIS Assistant
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, send_from_directory
 from flask_cors import CORS
 import json
 import threading
@@ -21,6 +21,7 @@ from event_tracker import event_tracker
 from workflow_manager import workflow_manager
 from discovery import load_channels
 from analytics import performance_summary
+from instagram_graph import exchange_code, login_url
 
 class DashboardServer:
     def __init__(self, port=5000):
@@ -153,6 +154,52 @@ def get_performance():
     except Exception as error:
         return jsonify({'success': False, 'error': str(error)}), 500
 
+
+@app.route('/instagram/login', methods=['GET'])
+def instagram_login():
+    """Start official Instagram Login."""
+    return redirect(login_url())
+
+
+@app.route('/instagram/callback', methods=['GET'])
+def instagram_callback():
+    """Exchange Meta's OAuth code and save the local token without displaying it."""
+    if request.args.get('error'):
+        return f"Instagram login cancelled: {request.args.get('error_description', 'access denied')}", 400
+    code = request.args.get('code', '')
+    if not code:
+        return "Instagram did not return an authorization code.", 400
+    try:
+        token_data = exchange_code(code)
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+        values = {
+            'INSTAGRAM_ACCESS_TOKEN': token_data.get('access_token', ''),
+            'INSTAGRAM_USER_ID': str(token_data.get('user_id', '')),
+        }
+        os.environ.update(values)
+        existing = {}
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as file:
+                for line in file:
+                    if '=' in line and not line.lstrip().startswith('#'):
+                        key, value = line.rstrip('\n').split('=', 1)
+                        existing[key] = value
+        existing.update(values)
+        with open(env_path, 'w', encoding='utf-8') as file:
+            for key, value in existing.items():
+                file.write(f"{key}={value}\n")
+        return "Instagram connected successfully. You can close this tab and restart JARVIS.", 200
+    except Exception as error:
+        print(f"[INSTAGRAM OAUTH] Callback failed: {error}")
+        return "Instagram connection failed. Check the JARVIS terminal log.", 500
+
+
+@app.route('/instagram/media/<path:filename>', methods=['GET'])
+def instagram_media(filename):
+    """Serve a temporary clip to Meta during Reel processing."""
+    clips_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clips')
+    return send_from_directory(clips_dir, filename, max_age=60)
+
 # ---------------- Shorts Studio (control the Shorts creator from the UI) ----------------
 import job_status
 
@@ -237,4 +284,4 @@ def start_dashboard():
     dashboard_server.start()
 
 if __name__ == '__main__':
-    dashboard_server.start()
+    app.run(host='localhost', port=5000, debug=False, use_reloader=False)
