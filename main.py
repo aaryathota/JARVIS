@@ -1070,12 +1070,13 @@ def execute(command):
                 results = create_instagram_clips_from_youtube(video_url, num_clips=num_clips)
                 
                 if results:
+                    uploaded_count = len(results)
                     print(f"\n✅ SUCCESS! Created and uploaded {len(results)} Instagram Reels!")
                     print("="*60)
                     for i, clip_file in enumerate(results, 1):
                         print(f"Reel {i}: {clip_file}")
                     print("="*60 + "\n")
-                    speak(f"Success! I created and uploaded {num_clips} Instagram Reels to your account @fun_clips67!")
+                    speak(f"Success! I created and uploaded {uploaded_count} Instagram Reels to your account @fun_clips67!")
                 else:
                     print(f"\n❌ Failed to create Reels. Check the video URL, your internet connection, and Instagram credentials.\n")
                     speak("Failed to create Reels. Check your credentials and video URL, then try again.")
@@ -1088,8 +1089,9 @@ def execute(command):
                 result = generate_and_upload_instagram() if num_clips == 1 else batch_generate_instagram_videos(num_clips)
                 
                 if result:
-                    print(f"\n✅ SUCCESS! {num_clips} reels uploaded to Instagram!")
-                    speak(f"Success! I created and uploaded {num_clips} Instagram Reels!")
+                    uploaded_count = len(result) if isinstance(result, (list, tuple)) else num_clips
+                    print(f"\n✅ SUCCESS! {uploaded_count} reels uploaded to Instagram!")
+                    speak(f"Success! I created and uploaded {uploaded_count} Instagram Reels!")
                 else:
                     print(f"\n❌ Failed to upload reels.")
                     speak("Failed to upload reels. Please try again.")
