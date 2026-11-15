@@ -14,5 +14,17 @@
     "source_credit": "",
     "font": "C:/Windows/Fonts/arialbd.ttf",
     "font_size": 44
+  },
+  "captions": {
+    "enabled": true,
+    "font": "Arial",
+    "font_size": 84,
+    "highlight": "#FFE600",
+    "text_color": "#FFFFFF",
+    "outline": 6,
+    "uppercase": true,
+    "words_per_line": 3,
+    "margin_bottom": 620,
+    "language": "en"
   }
 }

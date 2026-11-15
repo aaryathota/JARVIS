@@ -136,6 +136,16 @@ def clean_music_query(command):
         return ""
     return q
 
+
+def ask_daily_clip_count(default=10):
+    """Ask for a daily batch size by voice, with a terminal fallback."""
+    speak(f"How many clips should I create today? Say a number from 1 to 10.")
+    response = (listen() or input("Number of daily clips (1-10, default 10): ")).strip()
+    match = re.search(r"\d+", response)
+    if not match:
+        return default
+    return max(1, min(int(match.group()), 10))
+
 def send_to_ui(message_type, text):
     """Send user or assistant message to web UI for transcript display"""
     global last_ui_message
@@ -934,8 +944,9 @@ def execute(command):
     if intent == "daily_clips":
         try:
             from daily import run_daily_clips
-            speak("Starting today's Shorts batch. I will handle the rest automatically.")
-            threading.Thread(target=run_daily_clips, kwargs={"limit": 10}, daemon=True).start()
+            count = ask_daily_clip_count()
+            speak(f"Starting today's Shorts batch with {count} clips. I will handle the rest automatically.")
+            threading.Thread(target=run_daily_clips, kwargs={"limit": count}, daemon=True).start()
         except Exception as error:
             print(f"[DAILY CLIPS ERROR] {error}")
             speak("I could not start the daily clips batch.")
@@ -951,8 +962,9 @@ def execute(command):
             choice = (listen() or input("Type link or daily: ")).strip().lower()
 
             if choice in {"daily", "scan", "scan youtube", "daily clips"}:
-                speak("Starting the daily YouTube Shorts workflow.")
-                threading.Thread(target=run_daily_clips, kwargs={"limit": 10}, daemon=True).start()
+                count = ask_daily_clip_count()
+                speak(f"Starting the daily YouTube Shorts workflow with {count} clips.")
+                threading.Thread(target=run_daily_clips, kwargs={"limit": count}, daemon=True).start()
                 return
             
             # Ask for video URL via terminal input

@@ -274,6 +274,10 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                     vertical=True  # YouTube Shorts format
                 )
                 job_status.clip(status_number, status="cutting", detail="Creating vertical Short")
+                if clip_path and os.path.exists(clip_path):
+                    job_status.clip(status_number, status="captioning", detail="Burning in captions")
+                    from caption_burner import add_captions
+                    clip_path = add_captions(clip_path)  # on-screen subtitles; safe no-op on failure
             except Exception as e:
                 print(f"[CLIPS] Clip {i+1} failed: {type(e).__name__}: {e}")
                 continue
