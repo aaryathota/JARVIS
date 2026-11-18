@@ -9,6 +9,12 @@ import requests
 
 from voice import listen, stop_listening
 from ai import ask_ai_text, decide_action, parse_intent, is_casual_query, handle_casual_query
+try:
+    import intent_router  # AI intent understanding (falls back to keywords if unavailable)
+    ROUTER_AVAILABLE = True
+except Exception as _router_error:
+    print(f"[WARNING] AI intent router not available: {_router_error}")
+    ROUTER_AVAILABLE = False
 from actions import *
 from workflow_engine import daily_routine, smart_tasks
 from agi_agent import agi_agent
@@ -182,6 +188,8 @@ def speak_and_ui(response_text):
 
 def get_relevant_articles(query):
     """Fetch relevant articles and websites for any query"""
+    if not _current_route.get("open_browser"):
+        return False  # a spoken answer is enough - don't open tabs for everyday questions
     try:
         pass  # webbrowser imported at top of file
         
@@ -585,6 +593,118 @@ def get_smart_intent(command):
         }
     
 # -----------------------
+# AI INTENT ROUTING + BROWSER POLICY
+# -----------------------
+# Filled in for every command by get_ai_intent(): which intent, and whether a
+# web page is actually worth opening (big research-type questions only).
+_current_route = {"intent": "", "open_browser": False, "quick_reply": "", "source": "none"}
+
+
+def browser_allowed():
+    """True only if the router decided this request deserves a browser tab."""
+    return bool(_current_route.get("open_browser"))
+
+
+def get_ai_intent(command):
+    """Understand the command with AI. If the AI is unavailable, fall back to the
+    old keyword matcher so every existing feature keeps working."""
+    global _current_route
+    result = intent_router.route(command) if ROUTER_AVAILABLE else None
+    if result:
+        _current_route = result
+        data = intent_router.to_intent_data(result, command)
+        print(f"[INTENT] AI router -> {data['intent']} ({result['source']}, "
+              f"confidence {result['confidence']:.2f}, browser={result['open_browser']})")
+        return data
+
+    data = get_smart_intent(command)
+    # Keyword safety net: a live-stream link is still recognised without the AI
+    try:
+        from live_clipper import extract_youtube_url
+        url = extract_youtube_url(command)
+        if url and ("live" in command or "stream" in command):
+            data = {"intent": "clip_live", "target": command, "confidence": 1.0}
+    except Exception:
+        pass
+    explicit_web = bool(re.search(r"\b(search|look up|google|browse|open)\b", command))
+    _current_route = {"intent": data.get("intent", ""), "open_browser": explicit_web,
+                      "quick_reply": "", "source": "keywords"}
+    return data
+
+
+def _ask_text(prompt, default=""):
+    try:
+        value = input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        value = ""
+    return value or default
+
+
+def _ask_int(prompt, default, low, high):
+    try:
+        value = int(_ask_text(prompt, str(default)))
+    except ValueError:
+        value = default
+    return max(low, min(high, value))
+
+
+def choose_video_format(command=""):
+    """Shorts or proper videos? Uses what the user already said; asks only if they didn't."""
+    from video_format import from_command, normalize, parse_answer, default_format
+    fmt = from_command(command) or normalize(_current_route.get("video_format"))
+    if fmt:
+        return fmt
+    default = default_format()
+    speak("Do you want Shorts or proper videos?")
+    answer = _ask_text(f"🎞️  Shorts or proper videos? (short / video, default {default}): ")
+    return parse_answer(answer) or default
+
+
+def handle_clip_live(command, url=None, video_format=None):
+    """Clip an ONGOING YouTube live stream into Shorts or proper videos (uploads to YouTube only)."""
+    from live_clipper import extract_youtube_url, is_live_url, clip_live_stream
+    from video_format import spec as format_spec
+
+    url = url or extract_youtube_url(command)
+    if not url:
+        speak("Paste the link of the live stream.")
+        url = extract_youtube_url(_ask_text("\n📍 Paste the YouTube live stream link: "))
+    if not url:
+        speak("I need a YouTube link to clip a live stream.")
+        return
+
+    fmt = video_format or choose_video_format(command)
+    fspec = format_spec(fmt)
+
+    speak("Checking the stream.")
+    if not is_live_url(url):
+        speak("That video is not live right now, so I'll clip it like a normal video.")
+        from actions import create_youtube_shorts
+        count = _ask_int("📊 Number of clips (default 2): ", 2, 1, 10)
+        results = create_youtube_shorts(url, num_clips=count, video_format=fmt)
+        speak(f"Uploaded {len(results)} {fspec['label']}." if results
+              else f"I could not create any {fspec['label']} from that link.")
+        return
+
+    count = _ask_int(f"📊 How many {fspec['noun']}s from the recent past? (default 2): ", 2, 1, 10)
+    back = _ask_int("⏪ How many minutes back should I look? 0-10 (default 5): ", 5, 0, 10)
+    watch = _ask_int("👀 Keep watching for new moments for how many more minutes? (default 0): ", 0, 0, 120)
+
+    def _run():
+        try:
+            speak("Clipping the live stream now. I'll let you know when they're uploaded.")
+            ids = clip_live_stream(url, num_clips=count, rewind_minutes=back, watch_minutes=watch,
+                                   video_format=fmt)
+            speak(f"Done. I uploaded {len(ids)} {fspec['label']} from the live stream." if ids
+                  else "I could not make any clips from that stream. Check the log for details.")
+        except Exception as error:
+            print(f"[LIVE CLIP ERROR] {type(error).__name__}: {error}")
+            speak("Something went wrong while clipping the live stream.")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# -----------------------
 # SMART REMINDER - Natural language time parsing
 # -----------------------
 def smart_handle_reminder(command):
@@ -800,6 +920,7 @@ def smart_read_news(query="general"):
 # -----------------------
 def execute(command):
     global RUNNING
+    original_command = command.strip()  # URLs are case-sensitive; `command` is lower-cased below
     command = command.lower().strip()
     print(f"\n[EXECUTE] Processing: {command}")
 
@@ -834,15 +955,21 @@ def execute(command):
             activate_mode(mode_name)
             return
 
-    # CHECK IF CASUAL QUERY FIRST (greetings, small talk)
-    if is_casual_query(command):
+    # AI INTENT ROUTER - understands what you mean (keyword matcher is only the safety net)
+    intent_data = get_ai_intent(command)
+
+    # Pure social message (hello / thanks / how are you): instant reply, no browser
+    if _current_route.get("quick_reply"):
+        speak_and_ui(_current_route["quick_reply"])
+        return
+
+    # Router offline and nothing matched: old casual handler (answer only, no browser)
+    if (_current_route.get("source") == "keywords" and intent_data.get("intent") == "unknown"
+            and is_casual_query(command)):
         print("[EXECUTE] Detected as casual query")
         response = handle_casual_query(command)
         speak_and_ui(response)
         return
-
-    # USE SMART AI-BASED INTENT DETECTION
-    intent_data = get_smart_intent(command)
     intent = intent_data.get("intent", "").lower()
     target = intent_data.get("target", "")
     print(f"[EXECUTE] Intent detected: {intent}")
@@ -941,12 +1068,24 @@ def execute(command):
             speak("I could not update the channel allowlist.")
         return
 
+    if intent == "clip_live":
+        try:
+            handle_clip_live(original_command)
+        except KeyboardInterrupt:
+            speak("Cancelled.")
+        except Exception as error:
+            print(f"[CLIP LIVE ERROR] {type(error).__name__}: {error}")
+            speak("I could not start the live stream clipper.")
+        return
+
     if intent == "daily_clips":
         try:
             from daily import run_daily_clips
+            from video_format import resolve as resolve_format, from_command, spec as format_spec
+            fmt = resolve_format(from_command(command) or _current_route.get("video_format"))
             count = ask_daily_clip_count()
-            speak(f"Starting today's Shorts batch with {count} clips. I will handle the rest automatically.")
-            threading.Thread(target=run_daily_clips, kwargs={"limit": count}, daemon=True).start()
+            speak(f"Starting today's batch of {format_spec(fmt)['label']} with {count} clips. I will handle the rest automatically.")
+            threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt}, daemon=True).start()
         except Exception as error:
             print(f"[DAILY CLIPS ERROR] {error}")
             speak("I could not start the daily clips batch.")
@@ -957,14 +1096,18 @@ def execute(command):
             from actions import create_youtube_shorts
             from daily import run_daily_clips
             
-            print(f"[SHORTS] YouTube Shorts command: {command}")
+            from video_format import spec as format_spec
+            print(f"[SHORTS] YouTube upload command: {command}")
+            fmt = choose_video_format(command)
+            fspec = format_spec(fmt)
+            print(f"[SHORTS] Format: {fspec['label']}")
             speak("Would you like to paste a video link, or should I scan your permitted channels and run the daily workflow?")
             choice = (listen() or input("Type link or daily: ")).strip().lower()
 
             if choice in {"daily", "scan", "scan youtube", "daily clips"}:
                 count = ask_daily_clip_count()
-                speak(f"Starting the daily YouTube Shorts workflow with {count} clips.")
-                threading.Thread(target=run_daily_clips, kwargs={"limit": count}, daemon=True).start()
+                speak(f"Starting the daily workflow for {fspec['label']} with {count} clips.")
+                threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt}, daemon=True).start()
                 return
             
             # Ask for video URL via terminal input
@@ -983,6 +1126,15 @@ def execute(command):
                 return
             
             print(f"\n✓ Got URL: {video_url}")
+
+            try:
+                from live_clipper import is_live_url
+                if is_live_url(video_url):
+                    speak("That's a live stream, so I'll clip it live.")
+                    handle_clip_live(command, url=video_url, video_format=fmt)
+                    return
+            except Exception as _live_check_error:
+                print(f"[SHORTS] Live check skipped: {_live_check_error}")
             speak("Got it! How many clips would you like? Choose any number from 1 to 10.")
             
             # Ask for number of clips
@@ -997,20 +1149,21 @@ def execute(command):
                 num_clips = 2
                 print(f"Using default: 2 clips")
             
-            print(f"\n🚀 Creating {num_clips} YouTube Shorts...")
-            speak(f"Creating {num_clips} YouTube Shorts. This may take a few minutes...")
+            print(f"\n🚀 Creating {num_clips} {fspec['label']}...")
+            speak(f"Creating {num_clips} {fspec['label']}. This may take a few minutes...")
             
             # Create shorts
-            results = create_youtube_shorts(video_url, num_clips=num_clips)
+            results = create_youtube_shorts(video_url, num_clips=num_clips, video_format=fmt)
             
             if results:
-                print(f"\n✅ SUCCESS! Created and uploaded {len(results)} YouTube Shorts!")
+                print(f"\n✅ SUCCESS! Created and uploaded {len(results)} {fspec['label']}!")
                 print("="*60)
                 for i, vid_id in enumerate(results, 1):
-                    short_url = f"https://www.youtube.com/shorts/{vid_id}"
-                    print(f"Short {i}: {short_url}")
+                    short_url = (f"https://www.youtube.com/shorts/{vid_id}" if fmt == "short"
+                                 else f"https://www.youtube.com/watch?v={vid_id}")
+                    print(f"{fspec['noun'].capitalize()} {i}: {short_url}")
                 print("="*60 + "\n")
-                speak(f"Success! I created and uploaded {len(results)} YouTube Shorts to your channel.")
+                speak(f"Success! I created and uploaded {len(results)} {fspec['label']} to your channel.")
             else:
                 print(f"\n❌ Failed to create Shorts. Please check the video URL and try again.\n")
                 speak("Failed to create Shorts. Please check the video URL and try again.")
@@ -1026,7 +1179,8 @@ def execute(command):
     # -----------------------
     # 📱 INSTAGRAM REELS - Upload from video URL (like YouTube Shorts)
     # -----------------------
-    if intent == "instagram_reels" or "instagram" in command or "insta" in command:
+    if intent == "instagram_reels" or (_current_route.get("source") == "keywords"
+                                       and ("instagram" in command or "insta" in command)):
         try:
             print(f"[INSTAGRAM] Instagram upload command: {command}")
             speak("I'll help you create and upload Instagram Reels! Please wait while I connect...")
@@ -1178,11 +1332,12 @@ def execute(command):
             speak(suggestions)
             
             # Open Google search for the topic (not GitHub/Stack Overflow)
-            google_url = f"https://www.google.com/search?q={target.replace(' ', '+')}"
-            speak("I'm opening Google to search for more information...")
-            webbrowser.open(google_url, new=1)
-            if ML_AVAILABLE:
-                learner.log_website_opened("google.com", context="suggestions")
+            if browser_allowed():
+                google_url = f"https://www.google.com/search?q={target.replace(' ', '+')}"
+                speak("I'm opening Google to search for more information...")
+                webbrowser.open(google_url, new=1)
+                if ML_AVAILABLE:
+                    learner.log_website_opened("google.com", context="suggestions")
         except Exception as e:
             print(f"[SUGGESTIONS] Fallback: {e}")
             speak("I can help with that! Let me get you some ideas...")
@@ -1206,11 +1361,12 @@ def execute(command):
             speak(answer)
             
             # Open Google search for the topic (not GitHub/Stack Overflow)
-            google_url = f"https://www.google.com/search?q={target.replace(' ', '+')}"
-            speak("I'm opening Google to search for more resources...")
-            webbrowser.open(google_url, new=1)
-            if ML_AVAILABLE:
-                learner.log_website_opened("google.com", context="make_suggestions")
+            if browser_allowed():
+                google_url = f"https://www.google.com/search?q={target.replace(' ', '+')}"
+                speak("I'm opening Google to search for more resources...")
+                webbrowser.open(google_url, new=1)
+                if ML_AVAILABLE:
+                    learner.log_website_opened("google.com", context="make_suggestions")
         except Exception as e:
             print(f"[MAKE] Fallback: {e}")
             speak("I can help you create that! Let me get you some tips...")
@@ -1983,6 +2139,9 @@ def execute(command):
                 pass
         
         # 🌐 Open Chrome for visual results
+        if not browser_allowed():
+            print("[WEB] Skipping browser - a spoken answer is enough")
+            return
         print("[WEB] Opening relevant websites in Chrome...")
         try:
             pass  # webbrowser imported at top of file

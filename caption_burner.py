@@ -73,6 +73,19 @@ def _video_size(cfg_path_video=None):
         return 1080, 1920
 
 
+def _probe_size(path):
+    """(width, height) of the video file, or None."""
+    try:
+        from video_clipper import _tool
+        r = subprocess.run([_tool("ffprobe"), "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", path],
+                           capture_output=True, text=True, timeout=30)
+        w, h = r.stdout.strip().split("x")[:2]
+        return int(w), int(h)
+    except Exception:
+        return None
+
+
 def _groq_key():
     key = os.getenv("GROQ_API_KEY")
     if key:
@@ -286,7 +299,10 @@ def add_captions(clip_path):
         if not words:
             say("[CAPTION BURN] No speech found - keeping clip without captions")
             return clip_path
-        w, h = _video_size()
+        w, h = _probe_size(clip_path) or _video_size()
+        if w > h:  # horizontal (proper video): smaller text near the bottom, more words per line
+            cfg = dict(cfg, font_size=round(h * 0.058), margin_bottom=round(h * 0.07),
+                       outline=max(3, round(h * 0.005)), words_per_line=max(int(cfg["words_per_line"]), 5))
         ass = build_ass(words, cfg, w, h)
         tmp_out = os.path.splitext(clip_path)[0] + "_cap.mp4"
         if burn_ass(clip_path, ass, tmp_out):

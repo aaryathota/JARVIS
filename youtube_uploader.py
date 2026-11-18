@@ -101,7 +101,7 @@ class YouTubeUploader:
     
     def upload_video(self, video_file, title, description, tags=None, category="24",
                     privacy_status="public", playlist_id=None, publish_at=None,
-                    pinned_comment=None):
+                    pinned_comment=None, video_format="short"):
         """
         Upload video to YouTube
         
@@ -133,11 +133,12 @@ class YouTubeUploader:
                 return None
 
             upload_tags = []
-            for tag in CORE_HASHTAGS + (tags or []):
+            is_short = video_format != "video"  # proper videos don't get the Shorts/viral tags
+            for tag in (CORE_HASHTAGS if is_short else []) + (tags or []):
                 clean_tag = str(tag).lower().lstrip("#").strip()
                 if clean_tag and clean_tag not in upload_tags:
                     upload_tags.append(clean_tag)
-            hashtag_line = " ".join(f"#{tag}" for tag in upload_tags[:15])
+            hashtag_line = " ".join(f"#{tag}" for tag in upload_tags[:15 if is_short else 3])
             if hashtag_line and hashtag_line not in description:
                 description = f"{description.rstrip()}\n\n{hashtag_line}"
             

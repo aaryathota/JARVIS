@@ -1,273 +1,210 @@
 """
-Clip Picker - finds the most engaging moments of a video.
-
-Signals used (whatever is available for the video):
-  1. YouTube's "Most replayed" heatmap (info["heatmap"]) - real viewer data
-  2. The transcript (English subtitles) - scored for energy/reactions
-  3. The AI (Groq) reads the best candidates and ranks them
-
-If nothing is available, it returns [] and the caller falls back to random clips.
+Caption Generator
+Builds a title, description and tags for each Short, based on what the clip
+is actually about (source video title/description + the spoken words in the
+clip's time window when subtitles are available).
 """
 
 from job_status import say
-import bisect
+import glob
 import json
 import os
 import re
+from dotenv import load_dotenv
 
-from caption_generator import _ask_groq, _parse_json, find_subtitle_file
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-STEP = 10  # seconds between candidate window starts
-
-# Words/phrases that usually show up at big moments in reaction-style content
-KEYWORDS = [
-    "oh my god", "no way", "what the", "wait", "holy", "insane", "crazy",
-    "unbelievable", "are you serious", "i can't", "scream", "shut up",
-    "let's go", "hold on", "bro", "dude", "what happened", "look at",
-    "secret", "mistake", "never", "worst", "best", "the truth", "actually",
-]
-REACTION_TAGS = ["[laughter]", "[applause]", "[cheering]", "[screaming]", "[gasps]"]
-REJECT_TERMS = ("sponsor", "sponsored by", "welcome back", "subscribe", "intro", "outro")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+MAX_TITLE = 60
+CORE_HASHTAGS = ["shorts", "youtubeshorts", "viral", "trending"]
+CATEGORY_BY_NICHE = {
+    "gaming": "20",
+    "entertainment": "24",
+    "music": "10",
+    "science": "28",
+    "technology": "28",
+}
 
 
 # --------------------------------------------------------------------------
-# Loading data
+# Transcript for the clip window
 # --------------------------------------------------------------------------
-def load_segments(subtitle_anchor):
-    """Return a sorted list of (start, end, text) from the json3 subtitles."""
-    path = find_subtitle_file(subtitle_anchor)
+def find_subtitle_file(video_file):
+    """yt-dlp saves subs next to the video as <name>.<lang>.json3"""
+    base = os.path.splitext(video_file)[0]
+    matches = glob.glob(glob.escape(base) + ".en*.json3")
+    return matches[0] if matches else None
+
+
+def get_clip_transcript(video_file, start, end, max_chars=1500):
+    """Return the words spoken between start and end (seconds), or ''."""
+    path = find_subtitle_file(video_file)
     if not path:
-        return _transcribe_locally(subtitle_anchor)
+        return ""
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        parts = []
+        for ev in data.get("events", []):
+            t0 = ev.get("tStartMs", 0) / 1000.0
+            t1 = t0 + ev.get("dDurationMs", 0) / 1000.0
+            if t1 < start or t0 > end:
+                continue
+            text = "".join(s.get("utf8", "") for s in ev.get("segs", []) or [])
+            text = text.replace("\n", " ").strip()
+            if text:
+                parts.append(text)
+        return re.sub(r"\s+", " ", " ".join(parts)).strip()[:max_chars]
     except Exception as e:
-        say(f"[PICKER] Could not read subtitles: {e}")
-        return []
-    segs = []
-    for ev in data.get("events", []):
-        t0 = ev.get("tStartMs", 0) / 1000.0
-        t1 = t0 + ev.get("dDurationMs", 0) / 1000.0
-        text = "".join(s.get("utf8", "") for s in ev.get("segs", []) or [])
-        text = re.sub(r"\s+", " ", text.replace("\n", " ")).strip()
-        if text:
-            segs.append((t0, t1, text))
-    segs.sort(key=lambda s: s[0])
-    return segs
+        say(f"[CAPTIONS] Could not read subtitles: {e}")
+        return ""
 
 
-def _transcribe_locally(video_path):
-    """Use faster-whisper only when installed; subtitle parsing remains the default."""
-    if not video_path or not os.path.isfile(video_path):
-        return []
+# --------------------------------------------------------------------------
+# Groq call
+# --------------------------------------------------------------------------
+def _groq_key():
+    key = os.getenv("GROQ_API_KEY")
+    if key:
+        return key
     try:
-        import importlib
-        WhisperModel = importlib.import_module("faster_whisper").WhisperModel
-    except ImportError:
-        say("[PICKER] faster-whisper is not installed; continuing without local transcription")
-        return []
-    try:
-        model_name = os.getenv("WHISPER_MODEL", "small")
-        model = WhisperModel(model_name, device=os.getenv("WHISPER_DEVICE", "cpu"),
-                             compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
-        segments, _ = model.transcribe(video_path, word_timestamps=True)
-        return [(float(segment.start), float(segment.end), segment.text.strip())
-                for segment in segments if segment.text.strip()]
-    except Exception as error:
-        say(f"[PICKER] Local transcription unavailable: {type(error).__name__}: {error}")
-        return []
-
-
-def _heat_lookup(heatmap):
-    """Return f(t) -> 0..1 'most replayed' strength, or None if no heatmap."""
-    if not heatmap:
-        return None
-    try:
-        bins = sorted(
-            (float(b["start_time"]), float(b["end_time"]), float(b["value"]))
-            for b in heatmap
-        )
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json"), "r", encoding="utf-8-sig") as f:
+            return json.load(f).get("groq_api_key", "")
     except Exception:
-        return None
-    starts = [b[0] for b in bins]
-    top = max(b[2] for b in bins) or 1.0
-
-    def heat(t):
-        i = bisect.bisect_right(starts, t) - 1
-        if i < 0 or i >= len(bins):
-            return 0.0
-        return bins[i][2] / top
-
-    return heat
+        return ""
 
 
-# --------------------------------------------------------------------------
-# Scoring
-# --------------------------------------------------------------------------
-def _window_text(segments, starts, t0, t1):
-    i = max(bisect.bisect_left(starts, t0) - 1, 0)
-    out = []
-    while i < len(segments) and segments[i][0] < t1:
-        if segments[i][1] >= t0:
-            out.append(segments[i][2])
-        i += 1
-    return " ".join(out)
+def _ask_groq(prompt):
+    from groq import Groq
+
+    client = Groq(api_key=_groq_key())
+    kwargs = dict(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=2000,
+    )
+    try:
+        resp = client.chat.completions.create(
+            extra_body={"reasoning_effort": "low"}, **kwargs
+        )
+    except TypeError:
+        resp = client.chat.completions.create(**kwargs)
+    return resp.choices[0].message.content or ""
 
 
-def _heuristic(text, clip_duration, heat_value):
-    low = text.lower()
-    words = len(low.split())
-    score = min(words / clip_duration / 2.5, 1.5)  # speech density
-    score += min(sum(low.count(k) for k in KEYWORDS), 40) * 0.1
-    score += min(sum(low.count(t) for t in REACTION_TAGS), 12) * 0.2
-    if words < 10:  # silence / music only
-        score -= 1.0
-    score += 2.0 * heat_value
-    if any(term in low for term in REJECT_TERMS):
-        score -= 2.0
-    return score
-
-
-def _spaced_top(cands, k, min_gap):
-    """Highest-scoring candidates at least min_gap seconds apart (so picks are different moments)."""
-    chosen = []
-    for c in sorted(cands, key=lambda c: c["score"], reverse=True):
-        if all(abs(c["start"] - o["start"]) >= min_gap for o in chosen):
-            chosen.append(c)
-        if len(chosen) >= k:
-            break
-    return chosen
-
-
-def _snap_to_sentence(start, segments, duration, clip_duration, window=6.0):
-    """Start the clip where a caption line starts, so it doesn't open mid-word."""
-    best, gap = start, window
-    for t0, _, _ in segments:
-        if abs(t0 - start) < gap:
-            best, gap = t0, abs(t0 - start)
-    return max(0.0, min(best, max(duration - clip_duration, 0.0)))
-
-
-# --------------------------------------------------------------------------
-# AI ranking
-# --------------------------------------------------------------------------
-def _ai_rank(candidates, n, source_title):
-    lines = []
-    for idx, c in enumerate(candidates, 1):
-        lines.append(f'[{idx}] {int(c["start"])}s: {c["text"][:450]}')
-    prompt = f"""You pick the most viral 30-second moments from a long YouTube video
-to turn into YouTube Shorts.
-
-VIDEO TITLE: {source_title}
-
-Candidate moments (id, start time, what is said):
-{chr(10).join(lines)}
-
-Choose the {n} best moments. Good Shorts have: an immediate hook, a surprise,
-a funny or emotional reaction, a strong opinion, a punchline or payoff, and make
-sense without the rest of the video. Skip intros, outros, sponsor reads, filler
-talk and moments that need earlier context.
-
-Reply with ONLY valid JSON:
-{{"picks":[{{"id":1,"start":12,"end":42,"hook_text":"...",
-"score":9,"reason":"short reason"}}]}}
-Use a 20-45 second range. Require a hook in the first 3 seconds, self-contained
-context and a payoff. Skip intros, outros, sponsor reads and overlapping picks.
-score is 1-10 viral potential. Best first."""
-    data = _parse_json(_ask_groq(prompt))
-    picks = []
-    for p in data.get("picks", []):
-        try:
-            c = candidates[int(p["id"]) - 1]
-        except Exception:
-            continue
-        if c not in [x["cand"] for x in picks]:
-            start = max(float(p.get("start", c["start"])), c["start"])
-            end = min(float(p.get("end", start + 30)), c["start"] + 45)
-            if end - start < 20:
-                end = start + 20
-            picks.append({
-                "cand": c,
-                "start": start,
-                "end": end,
-                "hook_text": str(p.get("hook_text", "")),
-                "score": p.get("score", 5),
-                "reason": str(p.get("reason", "")),
-            })
-    return picks[:n]
+def _parse_json(text):
+    text = re.sub(r"```(?:json)?", "", text).strip()
+    m = re.search(r"\{.*\}", text, re.S)
+    return json.loads(m.group(0)) if m else {}
 
 
 # --------------------------------------------------------------------------
 # Public API
 # --------------------------------------------------------------------------
-def pick_viral_moments(info, subtitle_anchor, duration, num_clips, clip_duration=30):
+def _clean_tag(t):
+    return re.sub(r"[^a-z0-9]", "", str(t).lower().lstrip("#"))
+
+
+def _fallback(source_title, clip_number):
+    words = [_clean_tag(w) for w in re.findall(r"[A-Za-z0-9]+", source_title)]
+    words = [w for w in words if len(w) > 3][:4]
+    return {
+        "title": f"{source_title[:70].strip()} (Part {clip_number})",
+        "titles": [f"{source_title[:55].strip()} (Part {clip_number})"],
+        "hook": "Watch this moment from the video!",
+        "hashtags": words,
+        "pinned_comment": "What did you think about this moment?",
+    }
+
+
+def _pick_title(titles, source_title, max_len=None):
+    """Prefer short, specific titles without inventing claims."""
+    max_len = max_len or MAX_TITLE
+    candidates = []
+    for title in titles:
+        clean = re.sub(r"[#\r\n]", "", str(title)).strip()
+        if clean:
+            candidates.append(clean[:max_len])
+    if not candidates:
+        return source_title[:max_len].strip()
+    return max(candidates, key=lambda value: (
+        len(value) <= max_len - 5,
+        len(value.split()) >= 4,
+        len(value),
+    ))
+
+
+def generate_caption(source_title, source_description, channel, source_url,
+                     transcript, clip_number, moment_note="", niche="entertainment",
+                     video_format="short"):
     """
-    Returns up to num_clips dicts: {"start", "end", "score", "reason"} best first.
-    May return fewer (or []) if there is not enough data - caller fills the rest.
+    Returns dict: title, description, tags  (ready for uploader.upload_video)
+    video_format: "short" (#Shorts title + tags) or "video" (proper video, no Shorts tags)
     """
-    segments = load_segments(subtitle_anchor)
-    heat = _heat_lookup(info.get("heatmap"))
-    seg_starts = [s[0] for s in segments]
-    say(f"[PICKER] Signals: transcript={'yes' if segments else 'no'}, "
-          f"most-replayed={'yes' if heat else 'no'}")
+    is_short = video_format != "video"
+    kind = "YouTube Shorts clips" if is_short else "YouTube videos (horizontal highlight videos)"
+    noun = "Shorts" if is_short else "video"
+    title_limit = 60 if is_short else 90
+    generic_rule = ("Do not use generic tags such as shorts, viral or trending; those are added automatically."
+                    if is_short else "Do not use generic tags such as shorts, viral or trending.")
+    prompt = f"""You write titles and descriptions for {kind}.
 
-    if not segments and not heat:
-        return []
+SOURCE VIDEO TITLE: {source_title}
+SOURCE CHANNEL: {channel}
+SOURCE DESCRIPTION (may be long): {(source_description or '')[:600]}
+WORDS SPOKEN IN THIS CLIP: {transcript or '(not available)'}
+CLIP NUMBER: {clip_number}
+WHY THIS MOMENT WAS PICKED: {moment_note or '(not available)'}
 
-    # ---- Heatmap only: take the most replayed spots ----
-    if not segments:
-        bins = [(float(b["start_time"]), float(b["end_time"]), float(b["value"]))
-                for b in info["heatmap"]]
-        top = max(b[2] for b in bins) or 1.0
-        cands = []
-        for s, e, v in bins:
-            if v / top < 0.5:  # only genuine peaks count as "most replayed"
-                continue
-            centre = (s + e) / 2
-            start = max(0.0, min(centre - clip_duration / 2, duration - clip_duration))
-            cands.append({"start": start, "score": v})
-        out = []
-        for c in _spaced_top(cands, num_clips, clip_duration * 2):
-            out.append({"start": c["start"], "end": c["start"] + clip_duration,
-                        "score": round(c["score"] * 10, 1),
-                        "reason": "One of the most replayed parts of the video"})
-        return out
+Write a scroll-stopping {noun} title and caption for THIS clip.
+Rules:
+- The title must accurately reflect what is in the clip. Do not invent events,
+  quotes or claims. Curiosity and emotion are good; lying is not.
+- Title candidates: write exactly 5 options, each under {title_limit} characters, specific
+    to the clip, strong hook, 1 emoji at most, and no hashtags. Never invent
+    events, quotes, people or claims.
+- hook: 1-2 punchy sentences for the description that tease the clip.
+- hashtags: exactly 1 to 3 specific lowercase hashtags (no # symbol, no
+    spaces) about the clip's topic or the person speaking. {generic_rule}
+- pinned_comment: one natural question that invites replies without bait.
 
-    # ---- Transcript (+ optional heatmap): score sliding windows ----
-    cands = []
-    t = 0.0
-    while t + clip_duration <= duration + 0.001:
-        text = _window_text(segments, seg_starts, t, t + clip_duration)
-        h = heat(t + clip_duration / 2) if heat else 0.0
-        cands.append({"start": t, "text": text, "score": _heuristic(text, clip_duration, h)})
-        t += STEP
-    if not cands:
-        return []
+Reply with ONLY valid JSON, no other text:
+{{"titles": ["...", "...", "...", "...", "..."], "best_index": 1,
+"hook": "...", "hashtags": ["...", "..."], "pinned_comment": "..."}}"""
 
-    shortlist = _spaced_top(cands, min(max(num_clips * 4, 10), 15), clip_duration * 2)
-
-    ranked = None
     try:
-        ranked = _ai_rank(shortlist, num_clips, info.get("title", ""))
-        if not ranked:
-            raise ValueError("AI returned no usable picks")
+        data = _parse_json(_ask_groq(prompt))
+        if not (data.get("titles") or data.get("title")):
+            raise ValueError("model returned no title")
     except Exception as e:
-        say(f"[PICKER] AI ranking failed ({type(e).__name__}: {e}) - using energy score only")
+        say(f"[CAPTIONS] AI caption failed ({type(e).__name__}: {e}), using fallback")
+        data = _fallback(source_title, clip_number)
 
-    if ranked is None:
-        ranked = [{"cand": c, "score": round(c["score"], 1),
-                   "reason": "High-energy moment (speech, reactions, replays)"}
-                  for c in shortlist[:num_clips]]
+    titles = data.get("titles") or ([data["title"]] if data.get("title") else [])
 
-    out = []
-    for r in ranked:
-        requested_start = r.get("start", r["cand"]["start"])
-        requested_end = r.get("end", requested_start + clip_duration)
-        requested_duration = max(20.0, min(45.0, requested_end - requested_start))
-        start = _snap_to_sentence(requested_start, segments, duration, requested_duration)
-        end = min(start + requested_duration, duration)
-        if any(start < prior["end"] and end > prior["start"] for prior in out):
-            continue
-        out.append({"start": start, "end": end, "score": r["score"],
-                    "reason": r["reason"], "hook_text": r.get("hook_text", "")})
-    return out
+    max_title = MAX_TITLE if is_short else 100
+    tags = list(CORE_HASHTAGS) if is_short else []
+    max_tags = len(CORE_HASHTAGS) + 3 if is_short else 5
+    for t in data.get("hashtags", []):
+        t = _clean_tag(t)
+        if t and t not in tags and len(tags) < max_tags:
+            tags.append(t)
+
+    base_title = _pick_title(titles, source_title, max_title)
+    title = base_title
+    if is_short and len(base_title) + len(" #Shorts") <= max_title:
+        title = f"{base_title} #Shorts"
+    title = title[:max_title]
+
+    hashtag_line = " ".join("#" + t for t in tags[:10 if is_short else 3])
+    credit = f'Clip from "{source_title}" by {channel}\nOriginal video: {source_url}'
+    description = f"{data.get('hook', '').strip()}\n\n{credit}\n\n{hashtag_line}".strip()
+
+    return {
+        "title": title,
+        "title_candidates": titles[:5],
+        "description": description,
+        "tags": tags[:15],
+        "pinned_comment": str(data.get("pinned_comment", "What did you think?"))[:500],
+        "category_id": CATEGORY_BY_NICHE.get(str(niche).lower(), "24"),
+    }

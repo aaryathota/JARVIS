@@ -142,15 +142,20 @@ def create_video_clip(input_video, start_time, duration=45, output_path=None, ve
                 output_path
             ]
         else:
-            # Standard horizontal format
+            # Proper horizontal video: keep the original framing, cap at 1080p,
+            # and use the same encoder / audio settings as the Shorts render
             cmd = [
                 ffmpeg_path,
                 "-i", input_video,
                 "-ss", str(start_time),
                 "-t", str(duration),
-                "-c:v", "libx264",
-                "-preset", "fast",
+                "-vf", "scale=w='min(1920,iw)':h=-2,format=yuv420p",
+                "-c:v", encoder,
+                "-preset", "p4" if encoder == "h264_nvenc" else settings.get("preset", "fast"),
+                "-crf", str(settings.get("crf", 23)),
                 "-c:a", "aac",
+                "-b:a", settings.get("audio_bitrate", "128k"),
+                *( ["-af", "loudnorm=I=-14:LRA=11:TP=-1.5"] if settings.get("loudnorm", True) else [] ),
                 "-y",  # Overwrite output
                 output_path
             ]

@@ -75,20 +75,7 @@ class InstagramUploader:
             print("[INSTAGRAM] Logging in to Instagram...")
             self.client = Client()
             
-            # Suppress output during login
-            import io
-            import sys
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            
-            try:
-                # Redirect output to suppress instagrapi's verbose output
-                sys.stdout = io.StringIO()
-                sys.stderr = io.StringIO()
-                self.client.login(self.username, self.password)
-            finally:
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
+            self.client.login(self.username, self.password)
             
             self.is_authenticated = True
             print(f"[INSTAGRAM] [OK] Authenticated as {self.username}")

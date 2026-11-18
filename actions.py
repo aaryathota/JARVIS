@@ -426,26 +426,32 @@ def get_video_upload_history(limit=5):
         return []
 
 
-def create_youtube_shorts(video_url, num_clips=2, privacy_status="public"):
-    """Create and upload YouTube Shorts from any YouTube video"""
+def create_youtube_shorts(video_url, num_clips=2, privacy_status="public", video_format=None, clip_duration=None):
+    """Create and upload YouTube Shorts (default) or proper horizontal videos from any YouTube video.
+    video_format: "short" | "video" | None (None = settings.json "upload_format")"""
     try:
         from clip_automation import create_and_upload_clips_from_video
         from utils import speak
+        from video_format import resolve, spec as format_spec
+
+        fmt = resolve(video_format)
+        fspec = format_spec(fmt)
         
-        print("[SHORTS] Starting YouTube Shorts creation...")
-        speak(f"Creating {num_clips} YouTube Shorts from the video. This may take a few minutes.")
+        print(f"[SHORTS] Starting {fspec['label']} creation...")
+        speak(f"Creating {num_clips} {fspec['label']} from the video. This may take a few minutes.")
         
         results = create_and_upload_clips_from_video(
             video_url=video_url,
             num_clips=num_clips,
-            clip_duration=30,
+            clip_duration=clip_duration or fspec["clip_seconds"],
             privacy_status=privacy_status,
-            wait_between_uploads=60  # Wait 60 seconds between uploads to avoid quota issues
+            wait_between_uploads=60,  # Wait 60 seconds between uploads to avoid quota issues
+            video_format=fmt
         )
         
         if results:
-            speak(f"Successfully created and uploaded {len(results)} YouTube Shorts!")
-            print(f"[SHORTS] Uploaded {len(results)} Shorts: {results}")
+            speak(f"Successfully created and uploaded {len(results)} {fspec['label']}!")
+            print(f"[SHORTS] Uploaded {len(results)} {fspec['label']}: {results}")
             return results
         else:
             speak("Failed to create YouTube Shorts. Check the video URL and try again.")

@@ -26,5 +26,6 @@
     "words_per_line": 3,
     "margin_bottom": 620,
     "language": "en"
-  }
+  },
+  "upload_format": "short"
 }

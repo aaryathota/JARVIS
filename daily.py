@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 import job_status
 from clip_automation import create_and_upload_clips_from_video
+from video_format import resolve as resolve_format, spec as format_spec
 from discovery import Candidate, discover_candidates
 
 DEFAULT_WINDOWS = ("09:00", "12:00", "15:00", "18:00", "21:00")
@@ -36,12 +37,15 @@ def publish_schedule(count: int, now: datetime | None = None) -> list[str]:
             for index in range(count)]
 
 
-def _process_candidate(candidate: Candidate, publish_at: str, dry_run: bool, status_index: int) -> list[str]:
+def _process_candidate(candidate: Candidate, publish_at: str, dry_run: bool, status_index: int,
+                       video_format: str | None = None) -> list[str]:
     job_status.step(f"Clipping: {candidate.title[:70]}")
+    fmt = resolve_format(video_format)
     return create_and_upload_clips_from_video(
         candidate.url,
         num_clips=1,
-        clip_duration=30,
+        clip_duration=format_spec(fmt)["clip_seconds"],
+        video_format=fmt,
         privacy_status="public",
         wait_between_uploads=0,
         upload=not dry_run,
@@ -52,7 +56,7 @@ def _process_candidate(candidate: Candidate, publish_at: str, dry_run: bool, sta
     )
 
 
-def run_daily_clips(limit: int = 10, dry_run: bool = False) -> list[str]:
+def run_daily_clips(limit: int = 10, dry_run: bool = False, video_format: str | None = None) -> list[str]:
     """Discover and process a daily batch without interactive prompts."""
     limit = max(1, min(limit, 10))
     job_status.start(limit, "daily discovery")
@@ -71,7 +75,7 @@ def run_daily_clips(limit: int = 10, dry_run: bool = False) -> list[str]:
                 break
             print(f"[DAILY] {index + 1}/{len(candidates)} {candidate.title}")
             try:
-                results.extend(_process_candidate(candidate, schedule[index], dry_run, index + 1))
+                results.extend(_process_candidate(candidate, schedule[index], dry_run, index + 1, video_format))
             except Exception as error:
                 print(f"[DAILY] Failed source {candidate.video_id}: {error}")
         job_status.finish(results)
@@ -88,8 +92,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--dry-run", action="store_true", help="Create clips without uploading")
     parser.add_argument("--review", action="store_true", help="Create clips for dashboard review without uploading")
+    parser.add_argument("--format", choices=["short", "video"], default=None,
+                        help="Upload Shorts (vertical) or proper videos (horizontal); default from settings.json")
     args = parser.parse_args()
-    run_daily_clips(limit=args.limit, dry_run=args.dry_run or args.review)
+    run_daily_clips(limit=args.limit, dry_run=args.dry_run or args.review, video_format=args.format)
 
 
 if __name__ == "__main__":

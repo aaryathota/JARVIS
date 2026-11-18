@@ -117,28 +117,37 @@ def _fallback(source_title, clip_number):
     }
 
 
-def _pick_title(titles, source_title):
+def _pick_title(titles, source_title, max_len=None):
     """Prefer short, specific titles without inventing claims."""
+    max_len = max_len or MAX_TITLE
     candidates = []
     for title in titles:
         clean = re.sub(r"[#\r\n]", "", str(title)).strip()
         if clean:
-            candidates.append(clean[:MAX_TITLE])
+            candidates.append(clean[:max_len])
     if not candidates:
-        return source_title[:MAX_TITLE].strip()
+        return source_title[:max_len].strip()
     return max(candidates, key=lambda value: (
-        len(value) <= 55,
+        len(value) <= max_len - 5,
         len(value.split()) >= 4,
         len(value),
     ))
 
 
 def generate_caption(source_title, source_description, channel, source_url,
-                     transcript, clip_number, moment_note="", niche="entertainment"):
+                     transcript, clip_number, moment_note="", niche="entertainment",
+                     video_format="short"):
     """
     Returns dict: title, description, tags  (ready for uploader.upload_video)
+    video_format: "short" (#Shorts title + tags) or "video" (proper video, no Shorts tags)
     """
-    prompt = f"""You write titles and descriptions for YouTube Shorts clips.
+    is_short = video_format != "video"
+    kind = "YouTube Shorts clips" if is_short else "YouTube videos (horizontal highlight videos)"
+    noun = "Shorts" if is_short else "video"
+    title_limit = 60 if is_short else 90
+    generic_rule = ("Do not use generic tags such as shorts, viral or trending; those are added automatically."
+                    if is_short else "Do not use generic tags such as shorts, viral or trending.")
+    prompt = f"""You write titles and descriptions for {kind}.
 
 SOURCE VIDEO TITLE: {source_title}
 SOURCE CHANNEL: {channel}
@@ -147,17 +156,16 @@ WORDS SPOKEN IN THIS CLIP: {transcript or '(not available)'}
 CLIP NUMBER: {clip_number}
 WHY THIS MOMENT WAS PICKED: {moment_note or '(not available)'}
 
-Write a scroll-stopping Shorts title and caption for THIS clip.
+Write a scroll-stopping {noun} title and caption for THIS clip.
 Rules:
 - The title must accurately reflect what is in the clip. Do not invent events,
   quotes or claims. Curiosity and emotion are good; lying is not.
-- Title candidates: write exactly 5 options, each under 60 characters, specific
+- Title candidates: write exactly 5 options, each under {title_limit} characters, specific
     to the clip, strong hook, 1 emoji at most, and no hashtags. Never invent
     events, quotes, people or claims.
 - hook: 1-2 punchy sentences for the description that tease the clip.
 - hashtags: exactly 1 to 3 specific lowercase hashtags (no # symbol, no
-    spaces) about the clip's topic or the person speaking. Do not use generic
-    tags such as shorts, viral or trending; those are added automatically.
+    spaces) about the clip's topic or the person speaking. {generic_rule}
 - pinned_comment: one natural question that invites replies without bait.
 
 Reply with ONLY valid JSON, no other text:
@@ -174,19 +182,21 @@ Reply with ONLY valid JSON, no other text:
 
     titles = data.get("titles") or ([data["title"]] if data.get("title") else [])
 
-    tags = list(CORE_HASHTAGS)
+    max_title = MAX_TITLE if is_short else 100
+    tags = list(CORE_HASHTAGS) if is_short else []
+    max_tags = len(CORE_HASHTAGS) + 3 if is_short else 5
     for t in data.get("hashtags", []):
         t = _clean_tag(t)
-        if t and t not in tags and len(tags) < len(CORE_HASHTAGS) + 3:
+        if t and t not in tags and len(tags) < max_tags:
             tags.append(t)
 
-    base_title = _pick_title(titles, source_title)
+    base_title = _pick_title(titles, source_title, max_title)
     title = base_title
-    if len(base_title) + len(" #Shorts") <= MAX_TITLE:
+    if is_short and len(base_title) + len(" #Shorts") <= max_title:
         title = f"{base_title} #Shorts"
-    title = title[:MAX_TITLE]
+    title = title[:max_title]
 
-    hashtag_line = " ".join("#" + t for t in tags[:10])
+    hashtag_line = " ".join("#" + t for t in tags[:10 if is_short else 3])
     credit = f'Clip from "{source_title}" by {channel}\nOriginal video: {source_url}'
     description = f"{data.get('hook', '').strip()}\n\n{credit}\n\n{hashtag_line}".strip()
 

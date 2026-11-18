@@ -25,6 +25,36 @@ VIDEO_FORMAT = (
 )
 
 
+INSTAGRAM_LOGIN_TIMEOUT = 5  # seconds to wait for Instagram login before giving up
+
+
+def _instagram_login_with_timeout(timeout=INSTAGRAM_LOGIN_TIMEOUT):
+    """Try the Instagram credential login for `timeout` seconds.
+    Returns the uploader if login succeeded in time, otherwise None
+    (the caller then uploads to YouTube only)."""
+    import threading
+    result = {}
+
+    def _login():
+        try:
+            from instagram_uploader import InstagramUploader
+            result["uploader"] = InstagramUploader()
+        except Exception as e:
+            result["error"] = e
+
+    t = threading.Thread(target=_login, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        print(f"[INSTAGRAM] Login not granted within {timeout}s - skipping Instagram, uploading to YouTube only")
+        return None
+    uploader = result.get("uploader")
+    if uploader is None or not uploader.is_authenticated:
+        print("[INSTAGRAM] Login unavailable - uploading to YouTube only")
+        return None
+    return uploader
+
+
 def _remove(path):
     """Delete a file if it exists. Returns True if something was deleted."""
     try:
@@ -137,7 +167,7 @@ def download_segment(video_url, video_id, index, start, end):
 def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                                        privacy_status="public", wait_between_uploads=60,
                                        upload=True, publish_times=None, niche="entertainment",
-                                       manage_job_status=True, status_index=None):
+                                       manage_job_status=True, status_index=None, video_format=None):
     """
     Create clips from a YouTube video and upload them to YouTube Shorts.
     Only each clip's time range is downloaded (not the whole video).
@@ -152,8 +182,13 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
         from caption_generator import generate_caption, get_clip_transcript
         from utils import speak
         import job_status
+        from video_format import resolve, spec as format_spec
 
-        print("[CLIP AUTOMATION] Processing YouTube video for Shorts...")
+        fmt = resolve(video_format)          # "short" or "video"
+        fspec = format_spec(fmt)
+        is_short = fmt == "short"
+
+        print(f"[CLIP AUTOMATION] Processing YouTube video for {fspec['label']}...")
         if manage_job_status and not job_status.is_running():
             job_status.start(num_clips, video_url)
         if manage_job_status:
@@ -210,7 +245,8 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
             except Exception as e:
                 print(f"[CLIP AUTOMATION] Warning: Could not initialize YouTube uploader: {e}")
                 uploader = None
-            if os.getenv("INSTAGRAM_AUTO_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+            # Instagram Reels are vertical Shorts-style clips - skip it for proper videos
+            if is_short and os.getenv("INSTAGRAM_AUTO_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
                 try:
                     from instagram_graph import InstagramGraphUploader
                     graph_uploader = InstagramGraphUploader()
@@ -218,11 +254,8 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                         instagram_uploader = graph_uploader
                         print("[INSTAGRAM] Official Graph API uploader ready")
                     else:
-                        from instagram_uploader import InstagramUploader
-                        instagram_uploader = InstagramUploader()
-                        if not instagram_uploader.is_authenticated:
-                            print("[INSTAGRAM] Auto-upload disabled: Graph API is not configured and login is unavailable")
-                            instagram_uploader = None
+                        # Give the credential login 5 seconds; if not granted, skip Instagram
+                        instagram_uploader = _instagram_login_with_timeout()
                 except Exception as e:
                     print(f"[INSTAGRAM] Auto-upload unavailable: {e}")
 
@@ -233,7 +266,9 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
             try:
                 from clip_picker import pick_viral_moments
                 print("[SMART] Looking for the most viral moments...")
-                moments = pick_viral_moments(info, subtitle_anchor, video_duration, num_clips, clip_duration)
+                moments = pick_viral_moments(info, subtitle_anchor, video_duration, num_clips, clip_duration,
+                                             min_len=fspec["min_seconds"], max_len=fspec["max_seconds"],
+                                             kind=fspec["label"])
                 for m in moments:
                     random_start_times.append(m["start"])
                     moment_notes.append(m["reason"])
@@ -271,9 +306,10 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                     input_video=segment,
                     start_time=0,
                     duration=clip_duration,
-                    vertical=True  # YouTube Shorts format
+                    vertical=is_short  # Shorts = vertical 9:16, proper video = horizontal 16:9
                 )
-                job_status.clip(status_number, status="cutting", detail="Creating vertical Short")
+                job_status.clip(status_number, status="cutting",
+                                detail="Creating vertical Short" if is_short else "Creating video")
                 if clip_path and os.path.exists(clip_path):
                     job_status.clip(status_number, status="captioning", detail="Burning in captions")
                     from caption_burner import add_captions
@@ -312,7 +348,8 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                 cap = generate_caption(
                     source_info["title"], source_info["description"],
                     source_info["channel"], source_info["url"],
-                    transcript, i + 1, moment_note=moment_notes[i], niche=niche
+                    transcript, i + 1, moment_note=moment_notes[i], niche=niche,
+                    video_format=fmt
                 )
                 job_status.clip(status_number, status="captioning", title=cap.get("title", ""),
                                 reason=moment_notes[i])
@@ -329,15 +366,17 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
                     category=cap.get("category_id", "24"),
                     privacy_status=privacy_status,
                     pinned_comment=cap.get("pinned_comment"),
+                    video_format=fmt,
                     publish_at=(publish_times[i] if publish_times and i < len(publish_times) else None)
                 )
 
                 if video_id_uploaded:
                     print(f"[CLIPS] ✓ Uploaded! Video ID: {video_id_uploaded}")
-                    print(f"[CLIPS] URL: https://www.youtube.com/shorts/{video_id_uploaded}")
+                    url_base = "https://www.youtube.com/shorts/" if is_short else "https://www.youtube.com/watch?v="
+                    print(f"[CLIPS] URL: {url_base}{video_id_uploaded}")
                     uploaded_clips.append(video_id_uploaded)
                     job_status.clip(status_number, status="done", id=video_id_uploaded,
-                                    url=f"https://www.youtube.com/shorts/{video_id_uploaded}")
+                                    url=f"{url_base}{video_id_uploaded}")
                     speak(f"Clip {i+1} uploaded successfully!")
                     if instagram_uploader:
                         instagram_ok = instagram_uploader.upload_video(
@@ -367,11 +406,11 @@ def create_and_upload_clips_from_video(video_url, num_clips=2, clip_duration=30,
             _remove(f)
 
         if uploaded_clips:
-            msg = f"Successfully created and uploaded {len(uploaded_clips)} YouTube Shorts!"
+            msg = f"Successfully created and uploaded {len(uploaded_clips)} {fspec['label']}!"
             speak(msg)
             print(f"[CLIPS] ✓ {msg}")
             for vid in uploaded_clips:
-                print(f"[CLIPS] → https://www.youtube.com/shorts/{vid}")
+                print(f"[CLIPS] → {'https://www.youtube.com/shorts/' if is_short else 'https://www.youtube.com/watch?v='}{vid}")
         else:
             print("[CLIPS] No clips were successfully uploaded")
 
