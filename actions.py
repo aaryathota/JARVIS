@@ -426,7 +426,8 @@ def get_video_upload_history(limit=5):
         return []
 
 
-def create_youtube_shorts(video_url, num_clips=2, privacy_status="public", video_format=None, clip_duration=None):
+def create_youtube_shorts(video_url, num_clips=2, privacy_status="public", video_format=None, clip_duration=None,
+                          video_minutes=None):
     """Create and upload YouTube Shorts (default) or proper horizontal videos from any YouTube video.
     video_format: "short" | "video" | None (None = settings.json "upload_format")"""
     try:
@@ -435,7 +436,7 @@ def create_youtube_shorts(video_url, num_clips=2, privacy_status="public", video
         from video_format import resolve, spec as format_spec
 
         fmt = resolve(video_format)
-        fspec = format_spec(fmt)
+        fspec = format_spec(fmt, video_minutes)
         
         print(f"[SHORTS] Starting {fspec['label']} creation...")
         speak(f"Creating {num_clips} {fspec['label']} from the video. This may take a few minutes.")
@@ -446,7 +447,8 @@ def create_youtube_shorts(video_url, num_clips=2, privacy_status="public", video
             clip_duration=clip_duration or fspec["clip_seconds"],
             privacy_status=privacy_status,
             wait_between_uploads=60,  # Wait 60 seconds between uploads to avoid quota issues
-            video_format=fmt
+            video_format=fmt,
+            video_minutes=video_minutes
         )
         
         if results:

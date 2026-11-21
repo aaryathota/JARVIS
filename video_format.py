@@ -3,7 +3,7 @@ Video format - one place that knows the difference between a YouTube Short
 and a proper (horizontal, longer) YouTube video.
 
   "short"  vertical 9:16, ~30 s, #Shorts title/tags, short titles
-  "video"  horizontal 16:9, ~3 min, normal title/tags (no #Shorts), Instagram skipped
+  "video"  horizontal 16:9, length of your choice (asked in minutes), normal title/tags, Instagram skipped
 
 Default for anything that isn't asked: settings.json -> "upload_format" ("short" or "video").
 """
@@ -75,5 +75,37 @@ def from_command(text):
     return None
 
 
-def spec(fmt):
-    return FORMATS[resolve(fmt)]
+MAX_VIDEO_MINUTES = 60
+DEFAULT_VIDEO_MINUTES = 5
+
+
+def clamp_minutes(minutes):
+    try:
+        return max(1.0, min(float(MAX_VIDEO_MINUTES), float(minutes)))
+    except (TypeError, ValueError):
+        return float(DEFAULT_VIDEO_MINUTES)
+
+
+def minutes_from_command(text):
+    """'make 10 minute videos' -> 10.  None if no length with a unit was said."""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[- ]?\s*(?:minutes?|mins?)\b", (text or "").lower())
+    return clamp_minutes(m.group(1)) if m else None
+
+
+def parse_minutes_answer(text, default=DEFAULT_VIDEO_MINUTES):
+    """Understand a typed/spoken answer to 'how many minutes?' ('10', '10 minutes', '' -> default)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return clamp_minutes(default)
+    m = re.search(r"\d+(?:\.\d+)?", t)
+    return clamp_minutes(m.group(0)) if m else clamp_minutes(default)
+
+
+def spec(fmt, minutes=None):
+    """Format settings. For proper videos, `minutes` sets the length you asked for (+/- 15%)."""
+    fmt = resolve(fmt)
+    base = FORMATS[fmt]
+    if fmt == "video" and minutes:
+        target = int(clamp_minutes(minutes) * 60)
+        return dict(base, clip_seconds=target, min_seconds=int(target * 0.85), max_seconds=int(target * 1.15))
+    return base

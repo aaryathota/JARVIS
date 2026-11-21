@@ -160,7 +160,7 @@ def create_video_clip(input_video, start_time, duration=45, output_path=None, ve
                 output_path
             ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(300, int(duration * 4)))
         
         if result.returncode == 0 and os.path.exists(output_path):
             size_mb = os.path.getsize(output_path) / (1024 * 1024)

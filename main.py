@@ -660,7 +660,21 @@ def choose_video_format(command=""):
     return parse_answer(answer) or default
 
 
-def handle_clip_live(command, url=None, video_format=None):
+def choose_video_minutes(command=""):
+    """How long should each proper video be? Uses what was said ('10 minute videos'), else asks."""
+    from video_format import (minutes_from_command, parse_minutes_answer,
+                              DEFAULT_VIDEO_MINUTES, MAX_VIDEO_MINUTES)
+    said = minutes_from_command(command)
+    if said:
+        return said
+    speak("How many minutes should each video be?")
+    answer = _ask_text(f"⏱️  How many minutes should each video be? "
+                       f"(default {DEFAULT_VIDEO_MINUTES}, max {MAX_VIDEO_MINUTES}; "
+                       f"channels that aren't phone-verified can only upload up to 15): ")
+    return parse_minutes_answer(answer)
+
+
+def handle_clip_live(command, url=None, video_format=None, video_minutes=None):
     """Clip an ONGOING YouTube live stream into Shorts or proper videos (uploads to YouTube only)."""
     from live_clipper import extract_youtube_url, is_live_url, clip_live_stream
     from video_format import spec as format_spec
@@ -675,26 +689,30 @@ def handle_clip_live(command, url=None, video_format=None):
 
     fmt = video_format or choose_video_format(command)
     fspec = format_spec(fmt)
+    minutes = (video_minutes or choose_video_minutes(command)) if fmt == "video" else None
 
     speak("Checking the stream.")
     if not is_live_url(url):
         speak("That video is not live right now, so I'll clip it like a normal video.")
         from actions import create_youtube_shorts
         count = _ask_int("📊 Number of clips (default 2): ", 2, 1, 10)
-        results = create_youtube_shorts(url, num_clips=count, video_format=fmt)
+        results = create_youtube_shorts(url, num_clips=count, video_format=fmt, video_minutes=minutes)
         speak(f"Uploaded {len(results)} {fspec['label']}." if results
               else f"I could not create any {fspec['label']} from that link.")
         return
 
     count = _ask_int(f"📊 How many {fspec['noun']}s from the recent past? (default 2): ", 2, 1, 10)
-    back = _ask_int("⏪ How many minutes back should I look? 0-10 (default 5): ", 5, 0, 10)
+    from live_clipper import MAX_BUFFER_MINUTES
+    default_back = 5 if minutes is None else min(MAX_BUFFER_MINUTES, max(5, int(minutes * 1.15) + 1))
+    back = _ask_int(f"⏪ How many minutes back should I look? 0-{MAX_BUFFER_MINUTES} (default {default_back}): ",
+                    default_back, 0, MAX_BUFFER_MINUTES)
     watch = _ask_int("👀 Keep watching for new moments for how many more minutes? (default 0): ", 0, 0, 120)
 
     def _run():
         try:
             speak("Clipping the live stream now. I'll let you know when they're uploaded.")
             ids = clip_live_stream(url, num_clips=count, rewind_minutes=back, watch_minutes=watch,
-                                   video_format=fmt)
+                                   video_format=fmt, video_minutes=minutes)
             speak(f"Done. I uploaded {len(ids)} {fspec['label']} from the live stream." if ids
                   else "I could not make any clips from that stream. Check the log for details.")
         except Exception as error:
@@ -1083,9 +1101,11 @@ def execute(command):
             from daily import run_daily_clips
             from video_format import resolve as resolve_format, from_command, spec as format_spec
             fmt = resolve_format(from_command(command) or _current_route.get("video_format"))
+            minutes = choose_video_minutes(command) if fmt == "video" else None
             count = ask_daily_clip_count()
             speak(f"Starting today's batch of {format_spec(fmt)['label']} with {count} clips. I will handle the rest automatically.")
-            threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt}, daemon=True).start()
+            threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt,
+                                                             "video_minutes": minutes}, daemon=True).start()
         except Exception as error:
             print(f"[DAILY CLIPS ERROR] {error}")
             speak("I could not start the daily clips batch.")
@@ -1099,15 +1119,17 @@ def execute(command):
             from video_format import spec as format_spec
             print(f"[SHORTS] YouTube upload command: {command}")
             fmt = choose_video_format(command)
-            fspec = format_spec(fmt)
-            print(f"[SHORTS] Format: {fspec['label']}")
+            minutes = choose_video_minutes(command) if fmt == "video" else None
+            fspec = format_spec(fmt, minutes)
+            print(f"[SHORTS] Format: {fspec['label']}" + (f" of about {minutes:g} min" if minutes else ""))
             speak("Would you like to paste a video link, or should I scan your permitted channels and run the daily workflow?")
             choice = (listen() or input("Type link or daily: ")).strip().lower()
 
             if choice in {"daily", "scan", "scan youtube", "daily clips"}:
                 count = ask_daily_clip_count()
                 speak(f"Starting the daily workflow for {fspec['label']} with {count} clips.")
-                threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt}, daemon=True).start()
+                threading.Thread(target=run_daily_clips, kwargs={"limit": count, "video_format": fmt,
+                                                                 "video_minutes": minutes}, daemon=True).start()
                 return
             
             # Ask for video URL via terminal input
@@ -1131,7 +1153,7 @@ def execute(command):
                 from live_clipper import is_live_url
                 if is_live_url(video_url):
                     speak("That's a live stream, so I'll clip it live.")
-                    handle_clip_live(command, url=video_url, video_format=fmt)
+                    handle_clip_live(command, url=video_url, video_format=fmt, video_minutes=minutes)
                     return
             except Exception as _live_check_error:
                 print(f"[SHORTS] Live check skipped: {_live_check_error}")
@@ -1153,7 +1175,8 @@ def execute(command):
             speak(f"Creating {num_clips} {fspec['label']}. This may take a few minutes...")
             
             # Create shorts
-            results = create_youtube_shorts(video_url, num_clips=num_clips, video_format=fmt)
+            results = create_youtube_shorts(video_url, num_clips=num_clips, video_format=fmt,
+                                            video_minutes=minutes)
             
             if results:
                 print(f"\n✅ SUCCESS! Created and uploaded {len(results)} {fspec['label']}!")
@@ -1183,7 +1206,7 @@ def execute(command):
                                        and ("instagram" in command or "insta" in command)):
         try:
             print(f"[INSTAGRAM] Instagram upload command: {command}")
-            speak("I'll help you create and upload Instagram Reels! Please wait while I connect...")
+            speak("I'll make Instagram-ready Reels with captions. I won't log in to Instagram, so you upload them yourself.")
             
             print("\n" + "="*60)
             print("📱 INSTAGRAM REELS CREATOR")
@@ -1216,46 +1239,35 @@ def execute(command):
             print(f"\n🚀 Creating {num_clips} Instagram Reels from your video...")
             speak(f"Creating {num_clips} Instagram Reels. This may take several minutes...")
             
-            # Create clips and upload to Instagram
+            # Make Instagram-ready clips (NO Instagram login - you upload them yourself)
             try:
                 from instagram_clips import create_instagram_clips_from_youtube
-                
-                # Use the YouTube to Instagram converter (works with any video URL)
+
                 results = create_instagram_clips_from_youtube(video_url, num_clips=num_clips)
-                
+
                 if results:
-                    uploaded_count = len(results)
-                    print(f"\n✅ SUCCESS! Created and uploaded {len(results)} Instagram Reels!")
-                    print("="*60)
+                    print(f"\n✅ DONE! {len(results)} Instagram-ready Reels saved (captions burned in):")
+                    print("=" * 60)
                     for i, clip_file in enumerate(results, 1):
                         print(f"Reel {i}: {clip_file}")
-                    print("="*60 + "\n")
-                    speak(f"Success! I created and uploaded {uploaded_count} Instagram Reels to your account @fun_clips67!")
+                    print("=" * 60)
+                    print("Upload them to Instagram yourself, then delete them from the folder.\n")
+                    speak(f"Done. I saved {len(results)} Instagram-ready Reels with captions in the instagram ready folder. "
+                          "Upload them and delete them when you are done.")
                 else:
-                    print(f"\n❌ Failed to create Reels. Check the video URL, your internet connection, and Instagram credentials.\n")
-                    speak("Failed to create Reels. Check your credentials and video URL, then try again.")
-            
+                    print("\n❌ Could not create Reels. Check the video URL and your internet connection.\n")
+                    speak("I could not create the Reels. Check the video link and try again.")
+
             except ImportError as ie:
                 print(f"[INSTAGRAM] Module import error: {ie}")
-                print("[INSTAGRAM] Fallback: Using backup upload method")
-                speak("Using backup upload method...")
-                # Fallback if function not available
-                result = generate_and_upload_instagram() if num_clips == 1 else batch_generate_instagram_videos(num_clips)
-                
-                if result:
-                    uploaded_count = len(result) if isinstance(result, (list, tuple)) else num_clips
-                    print(f"\n✅ SUCCESS! {uploaded_count} reels uploaded to Instagram!")
-                    speak(f"Success! I created and uploaded {uploaded_count} Instagram Reels!")
-                else:
-                    print(f"\n❌ Failed to upload reels.")
-                    speak("Failed to upload reels. Please try again.")
-        
+                speak("The Instagram clip maker is not available.")
+
         except KeyboardInterrupt:
             print("\n\n⏹️  Cancelled by user.\n")
             speak("Cancelled.")
         except Exception as e:
-            print(f"\n[INSTAGRAM ERROR] {type(e).__name__}: {e}\n")
-            speak(f"Error uploading to Instagram: {str(e)[:50]}")
+            print(f"\n[INSTAGRAM CLIPS ERROR] {type(e).__name__}: {e}\n")
+            speak(f"Error creating Instagram clips: {str(e)[:50]}")
         return
 
     # -----------------------
@@ -2171,8 +2183,6 @@ def execute(command):
 # THREADS
 # -----------------------
 threading.Thread(target=stop_listener, daemon=True).start()
-threading.Thread(target=daily_routine, daemon=True).start()
-threading.Thread(target=smart_tasks, daemon=True).start()
 
 # NEW FEATURE THREADS
 if NEW_FEATURES_AVAILABLE:

@@ -4,6 +4,24 @@ import speech_recognition as sr
 import threading
 import os
 import signal
+import time
+
+# ---- MUTE: press this key (any window) to stop / resume listening.  Needs: pip install keyboard
+MUTE_KEY = "f8"
+MUTED = False
+
+
+def toggle_mute():
+    global MUTED
+    MUTED = not MUTED
+    print(f"[MUTE] Muted - press {MUTE_KEY.upper()} to unmute" if MUTED else "[MUTE] Listening again")
+
+
+try:
+    import keyboard
+    keyboard.add_hotkey(MUTE_KEY, toggle_mute)
+except Exception:
+    print("[MUTE] For the mute key run:  pip install keyboard")
 
 # Global flags
 LISTENING_ACTIVE = True
@@ -63,6 +81,11 @@ def listen():
     # Don't listen if stopped
     if not LISTENING_ACTIVE:
         return ""
+
+    # Muted: don't open the microphone
+    if MUTED:
+        time.sleep(0.25)
+        return ""
     
     # Fresh recognizer each time
     recognizer = sr.Recognizer()
@@ -82,6 +105,8 @@ def listen():
 
         # Process audio
         text = recognizer.recognize_google(audio_data).lower()
+        if MUTED:  # muted while listening: ignore what it heard
+            return ""
         print(f"[You said:] {text}")
         return text
 

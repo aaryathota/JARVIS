@@ -105,98 +105,21 @@ def convert_for_instagram(video_file):
 
 def create_instagram_clips_from_youtube(youtube_url, num_clips=2):
     """
-    Create Instagram clips from YouTube video (same as YouTube Shorts workflow)
-    
-    Process:
-    1. Download video from URL
-    2. Convert to Instagram format
-    3. Upload to Instagram
+    Make Instagram-READY Reels from a video link. NO Instagram login is ever attempted
+    (automated logins can get an account banned).
+
+    Uses the same smart pipeline as YouTube Shorts - best moments only, vertical 9:16,
+    captions burned in - and saves the results to the instagram_ready/ folder, with a
+    caption text file next to each one. Upload them yourself, then delete them.
+    Returns the list of saved file paths.
     """
     try:
-        from instagram_uploader import upload_to_instagram_only
-        import time
-        
-        # Try to import speak, but don't fail if missing
-        try:
-            from utils import speak
-        except:
-            def speak(text):
-                pass
-        
-        # Download YouTube video first
-        print(f"[CLIPS] Downloading video from YouTube...")
-        video_file = download_youtube_video(youtube_url)
-        
-        if not video_file:
-            print("[CLIPS] Failed to download video")
-            speak("Could not download the video from YouTube")
-            return []
-        
-        print("[CLIPS] [OK] Video downloaded successfully!")
-        
-        # Convert to Instagram format
-        instagram_file = convert_for_instagram(video_file)
-        
-        if not instagram_file:
-            print("[CLIPS] Failed to convert video")
-            speak("Could not convert the video for Instagram")
-            return []
-        
-        print("[CLIPS] [OK] Video converted successfully!")
-        
-        # Initialize Instagram-only upload path
-        print("[CLIPS] Initializing Instagram-only uploader...")
-        speak("Connecting to Instagram...")
-        speak("Uploading to Instagram only...")
-        
-        print(f"[CLIPS] Uploading {num_clips} clip(s) to Instagram...")
-        
-        # Upload clips
-        uploaded_clips = []
-        
-        try:
-            # Upload the converted video with simple caption (just title)
-            caption = "Check this out!"
-            
-            print(f"[CLIPS] Uploading: {instagram_file}")
-            result = upload_to_instagram_only(
-                instagram_file,
-                caption=caption
-            )
-            
-            if result:
-                uploaded_clips.append(instagram_file)
-                print(f"[CLIPS] [OK] Uploaded clip to Instagram!")
-                speak("Clip uploaded to Instagram successfully!")
-            else:
-                print(f"[CLIPS] Failed to upload clip")
-                speak("Failed to upload to Instagram")
-        
-        except Exception as upload_err:
-            print(f"[CLIPS] Upload error: {upload_err}")
-            speak(f"Upload failed: {str(upload_err)[:30]}")
-        
-        # Clean up temp files
-        try:
-            for temp_file in [video_file, instagram_file]:
-                if temp_file and os.path.exists(temp_file):
-                    os.remove(temp_file)
-                    print(f"[CLIPS] Cleaned up: {temp_file}")
-        except:
-            pass
-        
-        print(f"[CLIPS] Successfully uploaded {len(uploaded_clips)} clip(s)!")
-        return uploaded_clips
-    
-    except ImportError as e:
-        print(f"[CLIPS] Missing dependency: {e}")
-        print("[CLIPS] Try installing: pip install yt-dlp moviepy")
-        return []
-    
+        from clip_automation import create_and_upload_clips_from_video
+        return create_and_upload_clips_from_video(
+            video_url=youtube_url, num_clips=num_clips, clip_duration=30,
+            upload=False, instagram_only=True, video_format="short") or []
     except Exception as e:
         print(f"[CLIPS] Error: {e}")
-        import traceback
-        traceback.print_exc()
         return []
 
 

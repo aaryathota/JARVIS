@@ -38,14 +38,15 @@ def publish_schedule(count: int, now: datetime | None = None) -> list[str]:
 
 
 def _process_candidate(candidate: Candidate, publish_at: str, dry_run: bool, status_index: int,
-                       video_format: str | None = None) -> list[str]:
+                       video_format: str | None = None, video_minutes: float | None = None) -> list[str]:
     job_status.step(f"Clipping: {candidate.title[:70]}")
     fmt = resolve_format(video_format)
     return create_and_upload_clips_from_video(
         candidate.url,
         num_clips=1,
-        clip_duration=format_spec(fmt)["clip_seconds"],
+        clip_duration=format_spec(fmt, video_minutes)["clip_seconds"],
         video_format=fmt,
+        video_minutes=video_minutes,
         privacy_status="public",
         wait_between_uploads=0,
         upload=not dry_run,
@@ -56,7 +57,8 @@ def _process_candidate(candidate: Candidate, publish_at: str, dry_run: bool, sta
     )
 
 
-def run_daily_clips(limit: int = 10, dry_run: bool = False, video_format: str | None = None) -> list[str]:
+def run_daily_clips(limit: int = 10, dry_run: bool = False, video_format: str | None = None,
+                    video_minutes: float | None = None) -> list[str]:
     """Discover and process a daily batch without interactive prompts."""
     limit = max(1, min(limit, 10))
     job_status.start(limit, "daily discovery")
@@ -75,7 +77,7 @@ def run_daily_clips(limit: int = 10, dry_run: bool = False, video_format: str | 
                 break
             print(f"[DAILY] {index + 1}/{len(candidates)} {candidate.title}")
             try:
-                results.extend(_process_candidate(candidate, schedule[index], dry_run, index + 1, video_format))
+                results.extend(_process_candidate(candidate, schedule[index], dry_run, index + 1, video_format, video_minutes))
             except Exception as error:
                 print(f"[DAILY] Failed source {candidate.video_id}: {error}")
         job_status.finish(results)

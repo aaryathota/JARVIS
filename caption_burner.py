@@ -100,12 +100,13 @@ def _groq_key():
 # --------------------------------------------------------------------------
 # 1. Transcription -> list of {"word", "start", "end"}
 # --------------------------------------------------------------------------
-def _extract_audio(video_path, out_wav):
+def _extract_audio(video_path, out_path):
+    """Mono 16 kHz audio. .mp3 (small, for long videos) or .wav (default)."""
     from video_clipper import _tool
-    cmd = [_tool("ffmpeg"), "-y", "-i", video_path, "-vn", "-ac", "1",
-           "-ar", "16000", "-c:a", "pcm_s16le", out_wav]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    return r.returncode == 0 and os.path.exists(out_wav)
+    codec = ["-c:a", "libmp3lame", "-b:a", "48k"] if out_path.endswith(".mp3") else ["-c:a", "pcm_s16le"]
+    cmd = [_tool("ffmpeg"), "-y", "-i", video_path, "-vn", "-ac", "1", "-ar", "16000", *codec, out_path]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    return r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0
 
 
 def _get(obj, name, default=None):
@@ -151,10 +152,19 @@ def _transcribe_local(audio_path, language):
 def transcribe_words(video_path, language="en"):
     tmp = tempfile.mkdtemp(prefix="jarvis_cap_")
     try:
-        wav = os.path.join(tmp, "audio.wav")
-        if not _extract_audio(video_path, wav):
-            say("[CAPTION BURN] Could not extract audio")
-            return []
+        # Long videos: a 30-minute WAV is far over the free Groq upload limit (25 MB), so use mp3
+        try:
+            from video_clipper import get_video_duration
+            long_media = (get_video_duration(video_path) or 0) > 480
+        except Exception:
+            long_media = False
+        audio = os.path.join(tmp, "audio.mp3" if long_media else "audio.wav")
+        if not _extract_audio(video_path, audio):
+            audio = os.path.join(tmp, "audio.wav")                 # no mp3 encoder? use wav
+            if not _extract_audio(video_path, audio):
+                say("[CAPTION BURN] Could not extract audio")
+                return []
+        wav = audio
         for name, fn in (("Groq Whisper", _transcribe_groq),
                          ("local faster-whisper", _transcribe_local)):
             try:
@@ -260,6 +270,11 @@ def burn_ass(video_path, ass_text, out_path):
         encoders.append("libx264")  # GPU encoder listed but unusable -> retry on CPU
     tmp = tempfile.mkdtemp(prefix="jarvis_ass_")
     try:
+        try:
+            from video_clipper import get_video_duration
+            encode_timeout = max(600, int((get_video_duration(video_path) or 0) * 4))
+        except Exception:
+            encode_timeout = 600
         with open(os.path.join(tmp, "captions.ass"), "w", encoding="utf-8") as f:
             f.write(ass_text)
         for encoder in encoders:
@@ -275,7 +290,7 @@ def burn_ass(video_path, ass_text, out_path):
                 "-c:a", "copy",
                 os.path.abspath(out_path),
             ]
-            r = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=600)
+            r = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=encode_timeout)
             if r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0:
                 return True
             say(f"[CAPTION BURN] {encoder} failed, trying next: {r.stderr[-200:]}")

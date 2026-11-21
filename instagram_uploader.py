@@ -62,37 +62,16 @@ class InstagramUploader:
             print(f"[INSTAGRAM ERROR] Failed to load credentials: {e}")
     
     def authenticate(self):
-        """Authenticate with Instagram"""
-        try:
-            if not self.username or not self.password:
-                print("[INSTAGRAM] Cannot authenticate - missing credentials")
-                return False
-            
-            if not Client:
-                print("[INSTAGRAM] Client not available")
-                return False
-            
-            print("[INSTAGRAM] Logging in to Instagram...")
-            self.client = Client()
-            
-            self.client.login(self.username, self.password)
-            
-            self.is_authenticated = True
-            print(f"[INSTAGRAM] [OK] Authenticated as {self.username}")
-            return True
-        
-        except Exception as e:
-            self.is_authenticated = False
-            error_msg = str(e)[:100]  # Truncate long error messages
-            print(f"[INSTAGRAM ERROR] Authentication failed: {error_msg}")
-            if ("int() argument" in error_msg or "password encryption" in error_msg.lower()
-                    or "out of date" in error_msg.lower()):
-                print("[INSTAGRAM] Login endpoint compatibility failure; Instagram changed its public login encryption API.")
-                print("[INSTAGRAM] Use the official Graph API for reliable Reel publishing, or retry after instagrapi releases a fix.")
-            else:
-                print("[INSTAGRAM] Check credentials, 2FA, checkpoint approval, or account restrictions.")
-            return False
-    
+        """Disabled on purpose.
+
+        Automated Instagram logins can get an account flagged or banned, so JARVIS never logs in.
+        Clips are saved with captions to the instagram_ready/ folder; upload them by hand.
+        """
+        self.is_authenticated = False
+        print("[INSTAGRAM] Automatic login is disabled to protect your account. "
+              "Your captioned clips are in the 'instagram_ready' folder - upload them manually.")
+        return False
+
     def upload_video(self, video_path, caption="", hashtags=""):
         """Upload a video to Instagram (Reel)"""
         try:
